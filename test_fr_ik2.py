@@ -39,19 +39,40 @@ def servo_from_logical(ch: int, logical_deg: float):
     did_clamp = abs(clamped - raw) > 1e-9
     return int(round(clamped)), raw, did_clamp
 
-print("Enter x y z (mm) relative to A0 axis. Example: 120 60 -80")
+print("Enter: leg_id x y z (mm) relative to that leg's A0 axis")
+print("leg_id: 0=FR, 1=BR, 2=BL, 3=FL")
+print("Example: 0 120 60 -80")
 print("Type 'q' to quit.\n")
 
+LEG_MAP = {
+    0: {"name": "FR", "leg_idx": 0, "ch": (0, 1, 2)},
+    1: {"name": "BR", "leg_idx": 1, "ch": (3, 4, 5)},
+    2: {"name": "BL", "leg_idx": 2, "ch": (6, 7, 8)},
+    3: {"name": "FL", "leg_idx": 3, "ch": (9, 10, 11)},
+}
+
 while True:
-    s = input("xyz > ").strip()
+    s = input("ch xyz > ").strip()
     if s.lower() in ("q", "quit", "exit"):
         break
 
     try:
-        x, y, z = map(float, s.split())
+        leg_id_str, x_str, y_str, z_str = s.split()
+        leg_id = int(leg_id_str)
+        x = float(x_str)
+        y = float(y_str)
+        z = float(z_str)
     except ValueError:
-        print("Invalid input. Example: 120 60 -80")
+        print("Invalid input. Example: 0 120 60 -80")
         continue
+
+    if leg_id not in LEG_MAP:
+        print("Invalid leg_id. Use 0=FR, 1=BR, 2=BL, 3=FL")
+        continue
+
+    leg_name = LEG_MAP[leg_id]["name"]
+    leg_idx = LEG_MAP[leg_id]["leg_idx"]
+    ch0, ch1, ch2 = LEG_MAP[leg_id]["ch"]
 
     a0, a1, a2 = ik_leg_a0_xyz(x, y, z, geo, elbow="down")
     print(f"IK deg: a0={a0:.2f}, a1={a1:.2f}, a2(bend)={a2:.2f}")
@@ -64,9 +85,9 @@ while True:
     a1_servo = A1_REF - a1
     print(f"A1 remap: a1={a1:.2f} -> a1_servo={a1_servo:.2f}")
 
-    out0, raw0, c0 = servo_from_logical(CH0, a0)
-    out1, raw1, c1 = servo_from_logical(CH1, a1_servo)
-    out2, raw2, c2 = servo_from_logical(CH2, a2)
+    out0, raw0, c0 = servo_from_logical(ch0, a0)
+    out1, raw1, c1 = servo_from_logical(ch1, a1_servo)
+    out2, raw2, c2 = servo_from_logical(ch2, a2)
 
     clamp_note = []
     if c0: clamp_note.append("CH0 clamped")
@@ -82,4 +103,5 @@ while True:
         f"{clamp_note}\n"
     )
 
-    afb.quad.leg(LEG_IDX, out0, out1, out2)
+    print(f"[LEG] {leg_name} (leg_id={leg_id}, leg_idx={leg_idx}) -> channels {ch0},{ch1},{ch2}")
+    afb.quad.leg(leg_idx, out0, out1, out2)
