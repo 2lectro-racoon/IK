@@ -51,57 +51,94 @@ LEG_MAP = {
     3: {"name": "FL", "leg_idx": 3, "ch": (9, 10, 11)},
 }
 
-while True:
-    s = input("ch xyz > ").strip()
-    if s.lower() in ("q", "quit", "exit"):
-        break
+try:
+    while True:
+        s = input("ch xyz > ").strip()
+        if s.lower() in ("q", "quit", "exit"):
+            print("\n[INFO] Returning all legs to calibration center pose...")
 
-    try:
-        leg_id_str, x_str, y_str, z_str = s.split()
-        leg_id = int(leg_id_str)
-        x = float(x_str)
-        y = float(y_str)
-        z = float(z_str)
-    except ValueError:
-        print("Invalid input. Example: 0 120 60 -80")
-        continue
+            # Move all legs to their calibrated center positions
+            for leg_id, info in LEG_MAP.items():
+                leg_name = info["name"]
+                leg_idx = info["leg_idx"]
+                ch0, ch1, ch2 = info["ch"]
 
-    if leg_id not in LEG_MAP:
-        print("Invalid leg_id. Use 0=FR, 1=BR, 2=BL, 3=FL")
-        continue
+                center0 = int(round(calib.center_deg[ch0]))
+                center1 = int(round(calib.center_deg[ch1]))
+                center2 = int(round(calib.center_deg[ch2]))
 
-    leg_name = LEG_MAP[leg_id]["name"]
-    leg_idx = LEG_MAP[leg_id]["leg_idx"]
-    ch0, ch1, ch2 = LEG_MAP[leg_id]["ch"]
+                print(f"[CENTER] {leg_name} -> ch{ch0}={center0}, ch{ch1}={center1}, ch{ch2}={center2}")
+                afb.quad.leg(leg_idx, center0, center1, center2)
 
-    a0, a1, a2 = ik_leg_a0_xyz(x, y, z, geo, elbow="down")
-    print(f"IK deg: a0={a0:.2f}, a1={a1:.2f}, a2(bend)={a2:.2f}")
+            print("[INFO] Done. Exiting.\n")
+            break
 
-    fx, fy, fz = fk_leg_a0(a0, a1, a2, geo)
-    print(f"FK xyz: ({fx:.1f}, {fy:.1f}, {fz:.1f})  target=({x:.1f},{y:.1f},{z:.1f})")
+        try:
+            leg_id_str, x_str, y_str, z_str = s.split()
+            leg_id = int(leg_id_str)
+            x = float(x_str)
+            y = float(y_str)
+            z = float(z_str)
+        except ValueError:
+            print("Invalid input. Example: 0 120 60 -80")
+            continue
 
-    # 핵심: CH1이 0으로 클램프되는 문제를 막기 위한 리맵
-    A1_REF = 90.0
-    a1_servo = A1_REF - a1
-    print(f"A1 remap: a1={a1:.2f} -> a1_servo={a1_servo:.2f}")
+        if leg_id not in LEG_MAP:
+            print("Invalid leg_id. Use 0=FR, 1=BR, 2=BL, 3=FL")
+            continue
 
-    out0, raw0, c0 = servo_from_logical(ch0, a0)
-    out1, raw1, c1 = servo_from_logical(ch1, a1_servo)
-    out2, raw2, c2 = servo_from_logical(ch2, a2)
+        leg_name = LEG_MAP[leg_id]["name"]
+        leg_idx = LEG_MAP[leg_id]["leg_idx"]
+        ch0, ch1, ch2 = LEG_MAP[leg_id]["ch"]
 
-    clamp_note = []
-    if c0: clamp_note.append("CH0 clamped")
-    if c1: clamp_note.append("CH1 clamped")
-    if c2: clamp_note.append("CH2 clamped")
-    clamp_note = (" | " + ", ".join(clamp_note)) if clamp_note else ""
+        a0, a1, a2 = ik_leg_a0_xyz(x, y, z, geo, elbow="down")
+        print(f"IK deg: a0={a0:.2f}, a1={a1:.2f}, a2(bend)={a2:.2f}")
 
-    print(
-        f"SERVO(raw->out): "
-        f"ch0 {raw0:.2f}->{out0}  "
-        f"ch1 {raw1:.2f}->{out1}  "
-        f"ch2 {raw2:.2f}->{out2}"
-        f"{clamp_note}\n"
-    )
+        fx, fy, fz = fk_leg_a0(a0, a1, a2, geo)
+        print(f"FK xyz: ({fx:.1f}, {fy:.1f}, {fz:.1f})  target=({x:.1f},{y:.1f},{z:.1f})")
 
-    print(f"[LEG] {leg_name} (leg_id={leg_id}, leg_idx={leg_idx}) -> channels {ch0},{ch1},{ch2}")
-    afb.quad.leg(leg_idx, out0, out1, out2)
+        # 핵심: CH1이 0으로 클램프되는 문제를 막기 위한 리맵
+        A1_REF = 90.0
+        a1_servo = A1_REF - a1
+        print(f"A1 remap: a1={a1:.2f} -> a1_servo={a1_servo:.2f}")
+
+        out0, raw0, c0 = servo_from_logical(ch0, a0)
+        out1, raw1, c1 = servo_from_logical(ch1, a1_servo)
+        out2, raw2, c2 = servo_from_logical(ch2, a2)
+
+        clamp_note = []
+        if c0: clamp_note.append("CH0 clamped")
+        if c1: clamp_note.append("CH1 clamped")
+        if c2: clamp_note.append("CH2 clamped")
+        clamp_note = (" | " + ", ".join(clamp_note)) if clamp_note else ""
+
+        print(
+            f"SERVO(raw->out): "
+            f"ch0 {raw0:.2f}->{out0}  "
+            f"ch1 {raw1:.2f}->{out1}  "
+            f"ch2 {raw2:.2f}->{out2}"
+            f"{clamp_note}\n"
+        )
+
+        print(f"[LEG] {leg_name} (leg_id={leg_id}, leg_idx={leg_idx}) -> channels {ch0},{ch1},{ch2}")
+        afb.quad.leg(leg_idx, out0, out1, out2)
+
+except KeyboardInterrupt:
+    print("\n[CTRL+C] KeyboardInterrupt detected.")
+
+finally:
+    print("\n[INFO] Returning all legs to calibration center pose...")
+
+    for leg_id, info in LEG_MAP.items():
+        leg_name = info["name"]
+        leg_idx = info["leg_idx"]
+        ch0, ch1, ch2 = info["ch"]
+
+        center0 = int(round(calib.center_deg[ch0]))
+        center1 = int(round(calib.center_deg[ch1]))
+        center2 = int(round(calib.center_deg[ch2]))
+
+        print(f"[CENTER] {leg_name} -> ch{ch0}={center0}, ch{ch1}={center1}, ch{ch2}={center2}")
+        afb.quad.leg(leg_idx, center0, center1, center2)
+
+    print("[INFO] Exit complete.\n")
