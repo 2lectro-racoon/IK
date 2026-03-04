@@ -528,6 +528,13 @@ class CrawlDriver:
             dz_cmd = s_side * dz_roll + s_fb * dz_pitch
             dz_cmd = clampf(dz_cmd, -max_dz, max_dz)
 
+            # IMPORTANT (gait stance assist): in this robot, larger Z lifts the foot.
+            # For SUPPORT legs we generally never want to LIFT a support foot (dz>0),
+            # because that can reduce ground reaction force and worsen tipping.
+            # So clamp to only "push down" (dz<=0).
+            if dz_cmd > 0.0:
+                dz_cmd = 0.0
+
             prev = dz_state.get(leg_id, 0.0)
             dz_s = (1.0 - IMU_STAB_ALPHA_DZ) * prev + IMU_STAB_ALPHA_DZ * dz_cmd
             dz_state[leg_id] = dz_s
