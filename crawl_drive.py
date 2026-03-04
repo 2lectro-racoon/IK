@@ -28,6 +28,7 @@ from typing import Dict, Tuple
 
 from quad_api import make_default_api
 from ik_3dof_a0 import IKError
+import ik_3dof_a0 as ikmod
 
 
 # -------------------------
@@ -120,6 +121,63 @@ def body_x_to_local_x(leg_id: int, body_x: float) -> float:
 
 def side_sign(leg_id: int) -> int:
     return +1 if leg_id in RIGHT_LEGS else -1
+
+
+# -------------------------
+# Debug IK helper (for debug print only)
+# -------------------------
+def _try_ik_angles_deg(x: float, y: float, z: float) -> Tuple[float, float, float] | None:
+    """Best-effort IK debug helper.
+
+    Tries to call an IK function from `ik_3dof_a0` if present. Returns (a0,a1,a2) in degrees.
+    This is used ONLY for debug prints; motion behavior must not depend on this.
+    """
+    # Common function names used in different IK implementations
+    cand_names = [
+        "ik_deg",
+        "ik_solve_deg",
+        "solve_ik_deg",
+        "ik",
+        "ik_solve",
+        "solve_ik",
+        "solve",
+    ]
+
+    fn = None
+    for nm in cand_names:
+        fn = getattr(ikmod, nm, None)
+        if callable(fn):
+            break
+    if fn is None:
+        return None
+
+    try:
+        out = fn(x, y, z)
+    except Exception:
+        return None
+
+    # Normalize output
+    try:
+        if isinstance(out, (list, tuple)) and len(out) >= 3:
+            a0, a1, a2 = float(out[0]), float(out[1]), float(out[2])
+        elif isinstance(out, dict):
+            a0 = float(out.get("a0"))
+            a1 = float(out.get("a1"))
+            a2 = float(out.get("a2"))
+        else:
+            return None
+    except Exception:
+        return None
+
+    # Heuristic: if values look like radians (small magnitudes), convert to degrees.
+    # We assume degrees if any magnitude is > ~3.5 rad (~200 deg) is impossible, so:
+    if max(abs(a0), abs(a1), abs(a2)) <= 6.3:  # ~360deg in rad is 6.28
+        # Could still be degrees (e.g., 1~2 deg), but for debug we prefer radians->deg conversion.
+        a0 = math.degrees(a0)
+        a1 = math.degrees(a1)
+        a2 = math.degrees(a2)
+
+    return (a0, a1, a2)
 
 
 # -------------------------
@@ -368,6 +426,17 @@ class CrawlDriver:
         # 3) SWING: move swing leg to new x/y while keeping lifted z.
         # Simultaneously move support legs a little opposite (stance).
         swing_target = (x0 + dx_leg, y0 + dy_leg, z_lift)
+        # Debug: swing target XYZ and IK angles (if available)
+        xt, yt, zt = swing_target
+        ang = _try_ik_angles_deg(xt, yt, zt)
+        if ang is None:
+            print(f"[SWING_TGT] leg={swing_leg} xyz=({xt:+.1f},{yt:+.1f},{zt:+.1f}) a0/a1/a2=(n/a)")
+        else:
+            a0d, a1d, a2d = ang
+            print(
+                f"[SWING_TGT] leg={swing_leg} xyz=({xt:+.1f},{yt:+.1f},{zt:+.1f}) "
+                f"a0={a0d:+.2f} a1={a1d:+.2f} a2={a2d:+.2f}"
+            )
         support_targets = {}
         for leg_id in support:
             xs, ys, zs = self.foot[leg_id]
