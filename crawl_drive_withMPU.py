@@ -88,6 +88,10 @@ IMU_ALPHA = 0.99          # higher -> trust gyro more (less accel noise)
 IMU_CALIB_SEC = 2.0       # seconds of gyro bias averaging at startup
 IMU_PRINT_HZ = 5.0        # how often to print roll/pitch (Hz)
 
+# ---- Gait debug logging ----
+GAIT_DEBUG_ENABLE = True
+GAIT_DEBUG_HZ = 6.0   # rate-limit phase debug prints
+
 # ---- IMU acceleration-magnitude gating for complementary filter ----
 IMU_USE_ACCEL_GATING = True
 IMU_G_MIN = 8.5           # m/s^2, lower bound to consider accel tilt reliable
@@ -114,6 +118,9 @@ LEFT_LEGS = {2, 3}                 # BL, FL
 FRONT_LEGS = {0, 3}                # FR, FL
 
 BACK_LEGS = {1, 2}                 # BR, BL
+
+# Leg id to name mapping
+LEG_NAME = {0: "FR", 1: "BR", 2: "BL", 3: "FL"}
 
 # -------------------------
 # IMU shared state (updated in main loop)
@@ -338,6 +345,8 @@ class CrawlDriver:
         self.stand = (sx, sy, sz)
 
         self.order_idx = 0
+        self._dbg_last_t = 0.0
+        self._dbg_dt = 1.0 / max(0.1, GAIT_DEBUG_HZ)
 
     def _try_set_leg_xyz(self, leg_id: int, x: float, y: float, z: float) -> bool:
         """Set one leg target; return False if IK is unreachable."""
@@ -532,6 +541,45 @@ class CrawlDriver:
         sx, sy, sz = self.stand
         _ = self.set_all(sx, sy, sz, duration)
 
+    def dbg_gait(self, phase: str, swing_leg: int, cmd: Cmd, dbg: Dict | None = None):
+        """Rate-limited gait debug print.
+
+        Prints phase/swing leg/cmd and current filtered IMU roll/pitch.
+        If dbg is provided (from IMU z-comp functions), also prints per-leg dz_cmd/dz_s.
+        """
+        if not GAIT_DEBUG_ENABLE:
+            return
+        now = time.time()
+        if (now - self._dbg_last_t) < self._dbg_dt:
+            return
+        self._dbg_last_t = now
+
+        roll_deg = IMU_LATEST_ROLL_DEG
+        pitch_deg = IMU_LATEST_PITCH_DEG
+        leg_nm = LEG_NAME.get(swing_leg, str(swing_leg))
+        print(
+            f"[GAIT] phase={phase:<7} swing={leg_nm}({swing_leg}) cmd(vx,vy,wz)=({cmd.vx:+d},{cmd.vy:+d},{cmd.wz:+d}) "
+            f"imu(roll,pitch)=({roll_deg:+6.2f},{pitch_deg:+6.2f})"
+        )
+
+        if dbg is None:
+            return
+
+        # Expect dbg format: {er, ep, dz_roll, dz_pitch, legs:{leg_id:{dz_cmd,dz_s}}}
+        er = dbg.get("er", 0.0)
+        ep = dbg.get("ep", 0.0)
+        dzr = dbg.get("dz_roll", 0.0)
+        dzp = dbg.get("dz_pitch", 0.0)
+        print(f"[GAIT]   imu_err(er,ep)=({er:+6.2f},{ep:+6.2f}) dz_roll={dzr:+5.2f} dz_pitch={dzp:+5.2f}")
+
+        legs = dbg.get("legs", {})
+        if legs:
+            parts = []
+            for lid, info in legs.items():
+                nm = LEG_NAME.get(lid, str(lid))
+                parts.append(f"{nm}:{info.get('dz_cmd', 0.0):+5.2f}->{info.get('dz_s', 0.0):+5.2f}")
+            print("[GAIT]   dz_cmd->dz_s " + "  ".join(parts))
+
     def shift_body(self, swing_leg: int, body_shift_y: float, duration: float):
         """Shift 'body' laterally by moving all feet (in local y) accordingly.
 
@@ -574,6 +622,8 @@ class CrawlDriver:
         swing_leg = CRAWL_ORDER[self.order_idx % len(CRAWL_ORDER)]
         self.order_idx += 1
 
+        self.dbg_gait("START", swing_leg, cmd)
+
         sx, sy, sz = self.stand
         z_lift = sz + LIFT_DZ  # larger z lifts
 
@@ -599,6 +649,7 @@ class CrawlDriver:
         # (kept as-is for now; IMU stabilization test runs only when STOP)
         desired_body_shift = +SHIFT_MAG if swing_leg in RIGHT_LEGS else -SHIFT_MAG
         self.shift_body(swing_leg, desired_body_shift, PHASE_T)
+        self.dbg_gait("SHIFT", swing_leg, cmd)
 
         # IMU assist (phase-1): after SHIFT and before LIFT, apply a few Z-only compensation ticks.
         if IMU_SHIFT_ASSIST_ENABLE:
@@ -607,12 +658,13 @@ class CrawlDriver:
             # Baseline z reference for this assist window (prevents cumulative drift)
             z_ref = {leg_id: self.foot[leg_id][2] for leg_id in (0, 1, 2, 3)}
             for _ in range(max(0, IMU_SHIFT_ASSIST_TICKS)):
-                targets, _dbg = self.imu_z_comp_targets_current(
+                targets, dbg = self.imu_z_comp_targets_current(
                     dz_state=self._imu_dz_state,
                     max_dz=IMU_SHIFT_ASSIST_MAX_DZ,
                     z_ref=z_ref,
                 )
                 self.set_targets(targets)
+                self.dbg_gait("SHIFT_IMU", swing_leg, cmd, dbg=dbg)
                 time.sleep(MOVE_DT)
 
         # 2) LIFT swing leg (only z)
@@ -626,6 +678,7 @@ class CrawlDriver:
         if not hasattr(self, "_imu_dz_state_stance"):
             self._imu_dz_state_stance = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
 
+        self.dbg_gait("LIFT", swing_leg, cmd)
         for s in range(steps_lift + 1):
             u = s / steps_lift
             ue = smoothstep(u)
@@ -639,7 +692,7 @@ class CrawlDriver:
             # stance assist on support legs (z only)
             if IMU_STANCE_ASSIST_ENABLE and support:
                 xy_ref = {leg_id: (self.foot[leg_id][0], self.foot[leg_id][1]) for leg_id in support}
-                targets_sup, _ = self.imu_z_comp_targets_subset(
+                targets_sup, dbg_sup = self.imu_z_comp_targets_subset(
                     leg_ids=tuple(support),
                     dz_state=self._imu_dz_state_stance,
                     max_dz=IMU_STANCE_ASSIST_MAX_DZ,
@@ -647,6 +700,7 @@ class CrawlDriver:
                     z_ref=z_ref_lift,
                 )
                 self.set_targets(targets_sup)
+                self.dbg_gait("LIFT_IMU", swing_leg, cmd, dbg=dbg_sup)
 
             time.sleep(MOVE_DT)
 
@@ -673,6 +727,7 @@ class CrawlDriver:
 
         z_ref_swing: Dict[int, float] = {}
 
+        self.dbg_gait("SWING", swing_leg, cmd)
         for s in range(steps + 1):
             u = s / steps
             ue = smoothstep(u)
@@ -706,7 +761,7 @@ class CrawlDriver:
                     yj = lerp(yA0, yAt, ue)
                     xy_ref[leg_id] = (xj, yj)
 
-                targets_sup, _ = self.imu_z_comp_targets_subset(
+                targets_sup, dbg_sup = self.imu_z_comp_targets_subset(
                     leg_ids=tuple(support),
                     dz_state=self._imu_dz_state_stance,
                     max_dz=IMU_STANCE_ASSIST_MAX_DZ,
@@ -714,6 +769,7 @@ class CrawlDriver:
                     z_ref=z_ref_swing,
                 )
 
+                self.dbg_gait("SWING_IMU", swing_leg, cmd, dbg=dbg_sup)
                 for leg_id in support:
                     xj, yj, zj = targets_sup[leg_id]
                     if not self._try_set_leg_xyz(leg_id, xj, yj, zj):
@@ -736,12 +792,14 @@ class CrawlDriver:
         for leg_id in support:
             self.foot[leg_id] = support_targets[leg_id]
 
+        self.dbg_gait("DOWN", swing_leg, cmd)
         # 4) TOUCHDOWN swing leg back to stand z (keep x/y)
         x1, y1, _ = self.foot[swing_leg]
         if not self.set_pose(swing_leg, x1, y1, sz, PHASE_T):
             self.go_stand(duration=0.3)
             return
 
+        self.dbg_gait("UNSHIFT", swing_leg, cmd)
         # 5) UNSHIFT: remove ONLY the temporary shift (phase 1), preserving commanded y changes.
         # During shift_body() we added dy_local = body_y_to_local_y(leg_id, desired_body_shift).
         # Here we subtract the same amount, while keeping x as-is and returning z to stand.
