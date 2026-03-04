@@ -1,6 +1,6 @@
 # test_fr_ik2.py
 from ik_3dof_a0 import LegGeometry, ik_leg_a0_xyz, fk_leg_a0
-from calib import load_calibration
+from calib import load_calibration, clamp
 import afb
 import logging
 import os
@@ -23,21 +23,33 @@ print(f"[Geometry] A={A_LEN} B={B_LEN} C={C_LEN} Z_OFF={Z_OFF} DZ_A0_A1={DZ_A0_A
 
 calib = load_calibration("calib_quad.json")
 
-LEG_IDX = 0
-CH0, CH1, CH2 = 0, 1, 2
+def apply_one_debug(ch: int, delta_deg: float):
+    """Use the same calibration rule as the calibration tool (Calibration.apply_one).
 
-def servo_from_logical(ch: int, logical_deg: float):
-    """Return (servo_deg_int, raw_deg_float, did_clamp)."""
+    We treat `delta_deg` as a delta around the channel center.
+      req = center + delta
+    Then we send `req` through calib.apply_one.
+
+    Returns: (out_int, out_float_before_clamp, did_clamp)
+    """
     center = float(calib.center_deg[ch])
-    direction = int(calib.direction[ch])
-    offset = float(calib.offset_deg[ch])
+    req = center + float(delta_deg)
+
+    off = float(calib.offset_deg[ch])
+    d = int(calib.direction[ch])
     lo = float(calib.min_deg[ch])
     hi = float(calib.max_deg[ch])
 
-    raw = center + direction * float(logical_deg) + offset
-    clamped = max(lo, min(hi, raw))
-    did_clamp = abs(clamped - raw) > 1e-9
-    return int(round(clamped)), raw, did_clamp
+    # Match Calibration.apply_one(): apply offset in angle domain first, then mirror around center.
+    out_float = center + d * ((req + off) - center)
+    out_clamped = clamp(out_float, lo, hi)
+    did_clamp = abs(out_clamped - out_float) > 1e-9
+
+    out_int = calib.apply_one(ch, req)
+    return out_int, out_float, did_clamp
+
+LEG_IDX = 0
+CH0, CH1, CH2 = 0, 1, 2
 
 print("Enter: leg_id x y z (mm) relative to that leg's A0 axis")
 print("leg_id: 0=FR, 1=BR, 2=BL, 3=FL")
@@ -102,9 +114,10 @@ try:
         a1_servo = A1_REF - a1
         print(f"A1 remap: a1={a1:.2f} -> a1_servo={a1_servo:.2f}")
 
-        out0, raw0, c0 = servo_from_logical(ch0, a0)
-        out1, raw1, c1 = servo_from_logical(ch1, a1_servo)
-        out2, raw2, c2 = servo_from_logical(ch2, a2)
+        # Use the same calibration rule as the calibration tool
+        out0, raw0, c0 = apply_one_debug(ch0, a0)
+        out1, raw1, c1 = apply_one_debug(ch1, a1_servo)
+        out2, raw2, c2 = apply_one_debug(ch2, a2)
 
         clamp_note = []
         if c0: clamp_note.append("CH0 clamped")
@@ -113,7 +126,7 @@ try:
         clamp_note = (" | " + ", ".join(clamp_note)) if clamp_note else ""
 
         print(
-            f"SERVO(raw->out): "
+            f"SERVO(calib_out->int): "
             f"ch0 {raw0:.2f}->{out0}  "
             f"ch1 {raw1:.2f}->{out1}  "
             f"ch2 {raw2:.2f}->{out2}"
