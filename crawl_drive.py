@@ -64,7 +64,7 @@ BODYMOVE_YAW = 0.7                # multiplier for STEP_YAW
 
 # Plan-A drift fix: gently pull feet back toward their HOME slots during BODYMOVE.
 RECENTER_ENABLE = True
-RECENTER_K = 0.12                 # 0..1, fraction pulled toward HOME per BODYMOVE (higher = less drift, more "snap")
+RECENTER_K = 0.2                 # 0..1, fraction pulled toward HOME per BODYMOVE (higher = less drift, more "snap")
 
 # (legacy) Push parameters kept for reference; not used anymore.
 PUSH_ENABLE = False
