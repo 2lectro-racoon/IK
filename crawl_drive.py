@@ -46,7 +46,7 @@ COUNTER2_ENABLE = True             # also counter on a 2nd support leg (opposite
 COUNTER2_SCALE = 0.6               # scale for the 2nd leg counter (0..1)
 # FB (forward/back) Arduino-like tuning:
 # - Swing leg moves further (reach forward) than the body-move phase.
-STEP_FWD = 30.0                    # mm per step for forward/back command
+STEP_FWD = 60.0                    # mm per step for forward/back command
 STEP_LAT = 30.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
 FB_SWING_SCALE = 2.0               # swing distance multiplier for vx-only gait
