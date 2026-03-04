@@ -321,23 +321,32 @@ class CrawlDriver:
         x1, y1, _ = self.foot[swing_leg]
         self.set_pose(swing_leg, x1, y1, sz, PHASE_T)
 
-        # 5) UNSHIFT: return all feet y back toward stand y smoothly (keep current x)
-        # We move only y toward stand, keep x as is, keep z at stand.
+        # 5) UNSHIFT: remove ONLY the temporary shift (phase 1), preserving commanded y changes.
+        # During shift_body() we added dy_local = body_y_to_local_y(leg_id, desired_body_shift).
+        # Here we subtract the same amount, while keeping x as-is and returning z to stand.
         steps = max(1, int(PHASE_T / MOVE_DT))
         start = {i: self.foot[i] for i in (0, 1, 2, 3)}
+
+        # Target y for each leg: current y minus the temporary shift component
+        y_target = {}
+        for leg_id in (0, 1, 2, 3):
+            dy_local_shift = body_y_to_local_y(leg_id, desired_body_shift)
+            _, y_cur, _ = self.foot[leg_id]
+            y_target[leg_id] = y_cur - dy_local_shift
+
         for s in range(steps + 1):
             u = s / steps
             for leg_id in (0, 1, 2, 3):
                 x0, y0, z0 = start[leg_id]
-                # keep x, move y back to stand y, keep z at stand
                 xi = x0
-                yi = lerp(y0, sy, u)
+                yi = lerp(y0, y_target[leg_id], u)
                 zi = lerp(z0, sz, u)
                 self.api.set_leg_xyz(leg_id, xi, yi, zi, debug=False)
             time.sleep(MOVE_DT)
+
         for leg_id in (0, 1, 2, 3):
             x0, _, _ = self.foot[leg_id]
-            self.foot[leg_id] = (x0, sy, sz)
+            self.foot[leg_id] = (x0, y_target[leg_id], sz)
 
     def shutdown(self):
         self.api.go_center_pose(debug=True)
