@@ -515,7 +515,17 @@ class CrawlDriver:
         dz_roll = clampf(IMU_STAB_K_ROLL * er, -max_dz, max_dz)
         dz_pitch = clampf(IMU_STAB_K_PITCH * ep, -max_dz, max_dz)
 
-        dbg = {"er": er, "ep": ep, "dz_roll": dz_roll, "dz_pitch": dz_pitch, "legs": {}}
+        dbg = {
+            "er": er,
+            "ep": ep,
+            "roll_deg": roll_deg,
+            "pitch_deg": pitch_deg,
+            "dz_roll": dz_roll,
+            "dz_pitch": dz_pitch,
+            "max_dz": max_dz,
+            "support": list(leg_ids),
+            "legs": {},
+        }
         targets: Dict[int, Tuple[float, float, float]] = {}
 
         for leg_id in leg_ids:
@@ -525,21 +535,32 @@ class CrawlDriver:
             s_side = +1 if leg_id in LEFT_LEGS else -1   # LEFT legs get +, RIGHT legs get -
             s_fb = +1 if leg_id in BACK_LEGS else -1     # BACK legs get +, FRONT legs get -
 
-            dz_cmd = s_side * dz_roll + s_fb * dz_pitch
-            dz_cmd = clampf(dz_cmd, -max_dz, max_dz)
+            dz_raw = s_side * dz_roll + s_fb * dz_pitch
+            dz_clamped = clampf(dz_raw, -max_dz, max_dz)
 
             # IMPORTANT (gait stance assist): in this robot, larger Z lifts the foot.
             # For SUPPORT legs we generally never want to LIFT a support foot (dz>0),
             # because that can reduce ground reaction force and worsen tipping.
             # So clamp to only "push down" (dz<=0).
-            if dz_cmd > 0.0:
-                dz_cmd = 0.0
+            dz_after = dz_clamped
+            clamp_pos = False
+            if dz_after > 0.0:
+                dz_after = 0.0
+                clamp_pos = True
 
             prev = dz_state.get(leg_id, 0.0)
-            dz_s = (1.0 - IMU_STAB_ALPHA_DZ) * prev + IMU_STAB_ALPHA_DZ * dz_cmd
+            dz_s = (1.0 - IMU_STAB_ALPHA_DZ) * prev + IMU_STAB_ALPHA_DZ * dz_after
             dz_state[leg_id] = dz_s
 
-            dbg["legs"][leg_id] = {"dz_cmd": dz_cmd, "dz_s": dz_s}
+            dbg["legs"][leg_id] = {
+                "s_side": s_side,
+                "s_fb": s_fb,
+                "dz_raw": dz_raw,
+                "dz_clamped": dz_clamped,
+                "clamp_pos": clamp_pos,
+                "dz_cmd": dz_after,
+                "dz_s": dz_s,
+            }
             targets[leg_id] = (x, y, z_base + dz_s)
 
         return targets, dbg
@@ -579,13 +600,27 @@ class CrawlDriver:
         dzp = dbg.get("dz_pitch", 0.0)
         print(f"[GAIT]   imu_err(er,ep)=({er:+6.2f},{ep:+6.2f}) dz_roll={dzr:+5.2f} dz_pitch={dzp:+5.2f}")
 
+        support = dbg.get("support", None)
+        if support is not None:
+            sup_names = ",".join(LEG_NAME.get(l, str(l)) for l in support)
+            print(f"[GAIT]   support=[{sup_names}] max_dz={dbg.get('max_dz', 0.0):.2f}")
+
         legs = dbg.get("legs", {})
         if legs:
             parts = []
             for lid, info in legs.items():
                 nm = LEG_NAME.get(lid, str(lid))
-                parts.append(f"{nm}:{info.get('dz_cmd', 0.0):+5.2f}->{info.get('dz_s', 0.0):+5.2f}")
-            print("[GAIT]   dz_cmd->dz_s " + "  ".join(parts))
+                s_side = info.get("s_side", 0)
+                s_fb = info.get("s_fb", 0)
+                dz_raw = info.get("dz_raw", 0.0)
+                dz_cl = info.get("dz_clamped", 0.0)
+                dz_cmd = info.get("dz_cmd", 0.0)
+                dz_s = info.get("dz_s", 0.0)
+                cpos = info.get("clamp_pos", False)
+                parts.append(
+                    f"{nm}: s({s_side:+d},{s_fb:+d}) raw={dz_raw:+5.2f} cl={dz_cl:+5.2f} cmd={dz_cmd:+5.2f}{'*' if cpos else ' '} ->{dz_s:+5.2f}"
+                )
+            print("[GAIT]   zcomp " + " | ".join(parts))
 
     def shift_body(self, swing_leg: int, body_shift_y: float, duration: float):
         """Shift 'body' laterally by moving all feet (in local y) accordingly.
