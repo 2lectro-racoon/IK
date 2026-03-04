@@ -35,7 +35,7 @@ import ik_3dof_a0 as ikmod
 # Tunable parameters
 # -------------------------
 STAND_XYZ = (60.0, 120.0, -50.0)   # your current stable stand
-LIFT_DZ = 40.0                     # lift: z_lift = z_stand + LIFT_DZ (bigger z lifts)
+LIFT_DZ = 60.0                     # lift: z_lift = z_stand + LIFT_DZ (bigger z lifts)
 SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
 # --- Counterweight option #1: diagonal counter in X/Y/Z (local) ---
 COUNTER_DX = 15.0                  # mm, temporary diagonal-leg counter in BODY X (front +)
@@ -46,7 +46,7 @@ COUNTER2_ENABLE = True             # also counter on a 2nd support leg (opposite
 COUNTER2_SCALE = 0.6               # scale for the 2nd leg counter (0..1)
 # FB (forward/back) Arduino-like tuning:
 # - Swing leg moves further (reach forward) than the body-move phase.
-STEP_FWD = 60.0                    # mm per step for forward/back command
+STEP_FWD = 50.0                    # mm per step for forward/back command
 STEP_LAT = 30.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
 FB_SWING_SCALE = 2.0               # swing distance multiplier for vx-only gait
