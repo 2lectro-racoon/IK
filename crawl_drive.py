@@ -51,6 +51,10 @@ CRAWL_ORDER = [0, 2, 3, 1]         # 0=FR,1=BR,2=BL,3=FL
 RIGHT_LEGS = {0, 1}                # FR, BR
 LEFT_LEGS = {2, 3}                 # BL, FL
 
+# Leg front/back sets (for mapping body-forward to local x)
+FRONT_LEGS = {0, 3}                # FR, FL
+BACK_LEGS = {1, 2}                 # BR, BL
+
 
 # -------------------------
 # Small helpers
@@ -72,6 +76,20 @@ def body_y_to_local_y(leg_id: int, body_y: float) -> float:
     So local_y = +body_y for right legs, and local_y = -body_y for left legs.
     """
     return body_y if leg_id in RIGHT_LEGS else -body_y
+
+
+def body_x_to_local_x(leg_id: int, body_x: float) -> float:
+    """Convert body-frame +X(forward) displacement to each leg's local x.
+
+    You measured:
+      - Front legs: local +x moves the foot forward
+      - Back legs : local +x moves the foot backward
+
+    Therefore:
+      local_x = +body_x for FRONT legs
+      local_x = -body_x for BACK legs
+    """
+    return body_x if leg_id in FRONT_LEGS else -body_x
 
 
 def side_sign(leg_id: int) -> int:
@@ -216,27 +234,23 @@ class CrawlDriver:
         sx, sy, sz = self.stand
         z_lift = sz + LIFT_DZ  # smaller z lifts
 
-        # Convert cmd into per-leg swing delta (local frame)
-        # Translation:
-        dx = cmd.vx * STEP_FWD
-        dy_body = cmd.vy * STEP_LAT
+        # Convert cmd into per-leg swing delta.
+        # We treat commands in BODY frame first, then convert to each leg's LOCAL frame.
+        body_dx = cmd.vx * STEP_FWD          # +X forward
+        body_dy = cmd.vy * STEP_LAT          # +Y left
+        body_dx_yaw = cmd.wz * STEP_YAW      # yaw contribution in BODY frame
 
-        # Yaw:
-        # For CCW (+wz), push right legs forward, left legs backward (differential dx)
-        dx_yaw = cmd.wz * STEP_YAW
-        dx_leg = dx + dx_yaw * side_sign(swing_leg)
+        # Swing leg: BODY -> LOCAL
+        body_dx_swing = body_dx + body_dx_yaw * side_sign(swing_leg)
+        dx_leg = body_x_to_local_x(swing_leg, body_dx_swing)
+        dy_leg = body_y_to_local_y(swing_leg, body_dy)
 
-        # Lateral command uses body-y -> local-y mapping
-        dy_leg = body_y_to_local_y(swing_leg, dy_body)
-
-        # Support legs get a small opposite motion during swing to approximate body progress
+        # Support legs (stance): distribute opposite motion per leg in BODY frame, then map per leg to LOCAL.
         support = [i for i in (0, 1, 2, 3) if i != swing_leg]
         if support:
-            sup_dx = -dx_leg / len(support)
-            sup_dy = -dy_leg / len(support)
+            body_dy_support = -body_dy / len(support)
         else:
-            sup_dx = 0.0
-            sup_dy = 0.0
+            body_dy_support = 0.0
 
         # 1) SHIFT away from swing leg
         # If swing leg is RIGHT, shift body LEFT (+Y). If swing leg is LEFT, shift body RIGHT (-Y).
@@ -253,7 +267,13 @@ class CrawlDriver:
         support_targets = {}
         for leg_id in support:
             xs, ys, zs = self.foot[leg_id]
-            support_targets[leg_id] = (xs + sup_dx, ys + sup_dy, zs)
+
+            # BODY stance delta for this leg includes yaw (right forward / left backward), then map to LOCAL.
+            body_dx_support = -(body_dx + body_dx_yaw * side_sign(leg_id)) / len(support)
+            sup_dx_local = body_x_to_local_x(leg_id, body_dx_support)
+            sup_dy_local = body_y_to_local_y(leg_id, body_dy_support)
+
+            support_targets[leg_id] = (xs + sup_dx_local, ys + sup_dy_local, zs)
 
         steps = max(1, int(PHASE_T / MOVE_DT))
         swing_start = self.foot[swing_leg]
