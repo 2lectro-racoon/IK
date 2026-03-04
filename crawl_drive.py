@@ -91,7 +91,7 @@ def body_y_to_local_y(leg_id: int, body_y: float) -> float:
       - For LEFT legs, local +y corresponds to body -Y (outward to the left side is body -Y)
     So local_y = +body_y for right legs, and local_y = -body_y for left legs.
     """
-    return body_y if leg_id in RIGHT_LEGS else -body_y
+    return body_y if leg_id in RIGHT_LEGS else +body_y
 
 
 def body_x_to_local_x(leg_id: int, body_x: float) -> float:
@@ -162,9 +162,9 @@ def key_to_cmd(k: str) -> Cmd:
     if k == "s":
         return Cmd(vx=-1, vy=0, wz=0)
     if k == "a":
-        return Cmd(vx=0, vy=-1, wz=0)  # left
+        return Cmd(vx=0, vy=+1, wz=0)  # left
     if k == "d":
-        return Cmd(vx=0, vy=+1, wz=0)  # right
+        return Cmd(vx=0, vy=-1, wz=0)  # right
     if k == "q":
         return Cmd(vx=0, vy=0, wz=+1)  # CCW
     if k == "e":
@@ -304,8 +304,7 @@ class CrawlDriver:
         # For RIGHT swing legs, shift body LEFT (+Y). For LEFT swing legs, shift body RIGHT (-Y).
         # For BACK swing legs, shift body FORWARD (+X). For FRONT swing legs, shift body BACKWARD (-X).
         scale = SHIFT_SCALE_BY_LEG.get(swing_leg, 1.0)
-        # NOTE: Your observed body-Y sign is opposite of the original assumption, so we invert Y here.
-        desired_body_shift_y = (-SHIFT_Y_MAG if swing_leg in RIGHT_LEGS else +SHIFT_Y_MAG) * scale
+        desired_body_shift_y = (+SHIFT_Y_MAG if swing_leg in RIGHT_LEGS else -SHIFT_Y_MAG) * scale
         desired_body_shift_x = (+SHIFT_X_MAG if swing_leg in BACK_LEGS else -SHIFT_X_MAG) * scale
         self.shift_body(swing_leg, desired_body_shift_x, desired_body_shift_y, PHASE_T)
 
