@@ -40,7 +40,8 @@ STEP_LAT = 20.0                    # mm per step for left/right command
 STEP_YAW = 20.0                    # mm per step for yaw command (as differential dx between sides)
 
 # Timing
-MOVE_DT = 0.04                     # 25 Hz interpolation
+MOVE_DT = 0.02                     # 25 Hz interpolation
+# MOVE_DT = 0.04                     # 25 Hz interpolation
 PHASE_T = 0.2                     # seconds for each phase (shift/lift/swing/down/unshift)
 # PHASE_T = 0.45                     # seconds for each phase (shift/lift/swing/down/unshift)
 IDLE_HOLD = 0.35                   # if no key within this time -> cmd becomes 0 (stop)
