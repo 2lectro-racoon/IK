@@ -119,6 +119,18 @@ class KeyReader:
         ch = sys.stdin.read(1)
         return ch
 
+    def drain_last_key(self) -> str | None:
+        """Drain all pending keys and return only the last one.
+
+        This prevents OS key-repeat from queueing many characters while gait steps are slow.
+        """
+        last = None
+        while True:
+            k = self.read_key()
+            if k is None:
+                return last
+            last = k
+
 
 @dataclass
 class Cmd:
@@ -343,8 +355,7 @@ def main():
     with KeyReader() as kr:
         try:
             while True:
-                k = kr.read_key()
-                print(k)
+                k = kr.drain_last_key()
                 now = time.time()
 
                 if k is not None:
