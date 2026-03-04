@@ -79,8 +79,11 @@ PHASE_T = 0.2                     # seconds for each phase (shift/lift/swing/dow
 # PHASE_T = 0.45                     # seconds for each phase (shift/lift/swing/down/unshift)
 IDLE_HOLD = 0.35                   # if no key within this time -> cmd becomes 0 (stop)
 
-# Crawl order: FR -> BR -> FL -> BL
-CRAWL_ORDER = [0, 1, 3, 2]         # 0=FR,1=BR,2=BL,3=FL
+# Crawl order (non-FB gait): can depend on direction
+# Forward  : FR -> BR -> FL -> BL
+# Backward : BR -> FR -> BL -> FL
+CRAWL_ORDER_FWD = [0, 1, 3, 2]      # 0=FR,1=BR,2=BL,3=FL
+CRAWL_ORDER_BACK = [1, 0, 2, 3]
 
 # Leg side sets (for mapping body-left to local y)
 RIGHT_LEGS = {0, 1}                # FR, BR
@@ -275,6 +278,7 @@ class CrawlDriver:
         self.stand = (sx, sy, sz)
 
         self.order_idx = 0
+        self._crawl_order_key = "fwd"  # track which order is active (fwd/back) for non-FB gait
         # Forward/back sequencer (Arduino-like): BL -> FL -> PUSH -> BR -> FR -> PUSH
         self.fb_idx = 0
 
@@ -632,7 +636,20 @@ class CrawlDriver:
             self.fb_step(cmd)
             return
 
-        swing_leg = CRAWL_ORDER[self.order_idx % len(CRAWL_ORDER)]
+        # Direction-dependent crawl order (only for non-FB gait)
+        if cmd.vx < 0:
+            order = CRAWL_ORDER_BACK
+            key = "back"
+        else:
+            order = CRAWL_ORDER_FWD
+            key = "fwd"
+
+        # If direction order changes, reset index to avoid phase carry-over.
+        if key != self._crawl_order_key:
+            self._crawl_order_key = key
+            self.order_idx = 0
+
+        swing_leg = order[self.order_idx % len(order)]
         self.order_idx += 1
 
         diag_leg = DIAG_LEG[swing_leg]
