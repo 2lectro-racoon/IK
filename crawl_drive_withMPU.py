@@ -415,12 +415,13 @@ class CrawlDriver:
 
         return targets, dbg
 
-    def imu_z_comp_targets_current(self, dz_state: Dict[int, float], max_dz: float) -> Tuple[Dict[int, Tuple[float, float, float]], Dict]:
+    def imu_z_comp_targets_current(self, dz_state: Dict[int, float], max_dz: float, z_ref: Dict[int, float] | None = None) -> Tuple[Dict[int, Tuple[float, float, float]], Dict]:
         """Compute per-leg targets keeping current x/y and adjusting ONLY z using IMU roll/pitch error.
 
         Uses module-level globals updated in main:
           IMU_LATEST_ROLL_DEG / IMU_LATEST_PITCH_DEG
           IMU_ZERO_ROLL_DEG / IMU_ZERO_PITCH_DEG
+        z_ref: optional dict of per-leg baseline z (absolute reference for compensation)
         """
         roll_deg = IMU_LATEST_ROLL_DEG
         pitch_deg = IMU_LATEST_PITCH_DEG
@@ -434,7 +435,8 @@ class CrawlDriver:
         targets: Dict[int, Tuple[float, float, float]] = {}
 
         for leg_id in (0, 1, 2, 3):
-            x, y, z0 = self.foot[leg_id]
+            x, y, z_cur = self.foot[leg_id]
+            z_base = z_cur if z_ref is None else z_ref.get(leg_id, z_cur)
 
             # Same sign convention as stand stabilization
             s_side = +1 if leg_id in LEFT_LEGS else -1   # LEFT legs get +, RIGHT legs get -
@@ -448,7 +450,7 @@ class CrawlDriver:
             dz_state[leg_id] = dz_s
 
             dbg["legs"][leg_id] = {"dz_cmd": dz_cmd, "dz_s": dz_s}
-            targets[leg_id] = (x, y, z0 + dz_s)
+            targets[leg_id] = (x, y, z_base + dz_s)
 
         return targets, dbg
 
@@ -528,8 +530,14 @@ class CrawlDriver:
         if IMU_SHIFT_ASSIST_ENABLE:
             if not hasattr(self, "_imu_dz_state"):
                 self._imu_dz_state = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
+            # Baseline z reference for this assist window (prevents cumulative drift)
+            z_ref = {leg_id: self.foot[leg_id][2] for leg_id in (0, 1, 2, 3)}
             for _ in range(max(0, IMU_SHIFT_ASSIST_TICKS)):
-                targets, _dbg = self.imu_z_comp_targets_current(dz_state=self._imu_dz_state, max_dz=IMU_SHIFT_ASSIST_MAX_DZ)
+                targets, _dbg = self.imu_z_comp_targets_current(
+                    dz_state=self._imu_dz_state,
+                    max_dz=IMU_SHIFT_ASSIST_MAX_DZ,
+                    z_ref=z_ref,
+                )
                 self.set_targets(targets)
                 time.sleep(MOVE_DT)
 
