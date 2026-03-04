@@ -67,8 +67,8 @@ PHASE_T = 0.2                     # seconds for each phase (shift/lift/swing/dow
 # PHASE_T = 0.45                     # seconds for each phase (shift/lift/swing/down/unshift)
 IDLE_HOLD = 0.35                   # if no key within this time -> cmd becomes 0 (stop)
 
-# Crawl order (stable): FR -> BL -> FL -> BR
-CRAWL_ORDER = [0, 2, 3, 1]         # 0=FR,1=BR,2=BL,3=FL
+# Crawl order: FR -> BR -> FL -> BL
+CRAWL_ORDER = [0, 1, 3, 2]         # 0=FR,1=BR,2=BL,3=FL
 
 # Leg side sets (for mapping body-left to local y)
 RIGHT_LEGS = {0, 1}                # FR, BR
