@@ -347,7 +347,7 @@ class CrawlDriver:
                 self.foot[leg_id] = xyz
         return ok
 
-    def imu_stand_targets(self, roll_deg: float, pitch_deg: float, roll0_deg: float, pitch0_deg: float, dz_state: Dict[int, float]) -> Dict[int, Tuple[float, float, float]]:
+    def imu_stand_targets(self, roll_deg: float, pitch_deg: float, roll0_deg: float, pitch0_deg: float, dz_state: Dict[int, float]) -> Tuple[Dict[int, Tuple[float, float, float]], Dict]:
         """Compute per-leg stand targets with small Z adjustments from IMU.
 
         roll_deg  : filtered roll in degrees (right-down +)
@@ -366,6 +366,14 @@ class CrawlDriver:
         dz_roll = clampf(-IMU_STAB_K_ROLL * er, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
         dz_pitch = clampf(-IMU_STAB_K_PITCH * ep, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
 
+        dbg = {
+            "er": er,
+            "ep": ep,
+            "dz_roll": dz_roll,
+            "dz_pitch": dz_pitch,
+            "legs": {}
+        }
+
         targets: Dict[int, Tuple[float, float, float]] = {}
         for leg_id in (0, 1, 2, 3):
             x, y, _ = self.stand  # keep stand x/y
@@ -381,10 +389,12 @@ class CrawlDriver:
             dz_s = (1.0 - IMU_STAB_ALPHA_DZ) * prev + IMU_STAB_ALPHA_DZ * dz_cmd
             dz_state[leg_id] = dz_s
 
+            dbg["legs"][leg_id] = {"dz_cmd": dz_cmd, "dz_s": dz_s}
+
             z = self.stand[2] + dz_s
             targets[leg_id] = (x, y, z)
 
-        return targets
+        return targets, dbg
 
     def go_stand(self, duration: float = 0.4):
         sx, sy, sz = self.stand
@@ -601,6 +611,9 @@ def main():
 
     dz_state: Dict[int, float] = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
 
+    stab_print_dt = 0.5  # seconds (2 Hz)
+    last_stab_print = 0.0
+
     with KeyReader() as kr:
         try:
             while True:
@@ -626,8 +639,21 @@ def main():
                     # Use the most recent filtered angles (roll/pitch are in radians)
                     roll_deg = rad2deg(roll)
                     pitch_deg = rad2deg(pitch)
-                    targets = drv.imu_stand_targets(roll_deg, pitch_deg, roll0_deg, pitch0_deg, dz_state)
+                    targets, dbg = drv.imu_stand_targets(roll_deg, pitch_deg, roll0_deg, pitch0_deg, dz_state)
                     drv.set_targets(targets)
+
+                    if (now - last_stab_print) >= stab_print_dt:
+                        last_stab_print = now
+                        er = dbg["er"]
+                        ep = dbg["ep"]
+                        dzr = dbg["dz_roll"]
+                        dzp = dbg["dz_pitch"]
+                        legs = dbg["legs"]
+                        print(f"[STAB] roll_err={er:+6.2f}deg pitch_err={ep:+6.2f}deg | dz_roll={dzr:+5.2f} dz_pitch={dzp:+5.2f}")
+                        for leg_id in (0, 1, 2, 3):
+                            info = legs.get(leg_id, {})
+                            print(f"[STAB] leg{leg_id} dz_cmd={info.get('dz_cmd', 0.0):+5.2f} dz_s={info.get('dz_s', 0.0):+5.2f}")
+
                     time.sleep(MOVE_DT)
                 else:
                     # execute one crawl step
