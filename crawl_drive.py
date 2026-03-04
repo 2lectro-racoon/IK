@@ -214,7 +214,7 @@ class CrawlDriver:
         self.order_idx += 1
 
         sx, sy, sz = self.stand
-        z_lift = sz - LIFT_DZ  # smaller z lifts
+        z_lift = sz + LIFT_DZ  # smaller z lifts
 
         # Convert cmd into per-leg swing delta (local frame)
         # Translation:
