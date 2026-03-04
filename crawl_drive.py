@@ -62,6 +62,10 @@ BODYMOVE_FWD = 1.25               # multiplier for STEP_FWD (increase = stronger
 BODYMOVE_LAT = 0.9                # multiplier for STEP_LAT
 BODYMOVE_YAW = 0.7                # multiplier for STEP_YAW
 
+# Plan-A drift fix: gently pull feet back toward their HOME slots during BODYMOVE.
+RECENTER_ENABLE = True
+RECENTER_K = 0.12                 # 0..1, fraction pulled toward HOME per BODYMOVE (higher = less drift, more "snap")
+
 # (legacy) Push parameters kept for reference; not used anymore.
 PUSH_ENABLE = False
 PUSH_T = 0.25
@@ -277,6 +281,9 @@ class CrawlDriver:
         self.foot: Dict[int, Tuple[float, float, float]] = {i: (sx, sy, sz) for i in (0, 1, 2, 3)}
         self.stand = (sx, sy, sz)
 
+        # Per-leg HOME slot (used to prevent cumulative drift). Initialized from the starting stand pose.
+        self.home: Dict[int, Tuple[float, float, float]] = {i: self.foot[i] for i in (0, 1, 2, 3)}
+
         self.order_idx = 0
         self._crawl_order_key = "fwd"  # track which order is active (fwd/back) for non-FB gait
         # Forward/back sequencer (Arduino-like)
@@ -331,6 +338,8 @@ class CrawlDriver:
     def go_stand(self, duration: float = 0.4):
         sx, sy, sz = self.stand
         _ = self.set_all(sx, sy, sz, duration)
+        # Refresh HOME slots (stand pose) so drift correction uses the latest calibrated stand.
+        self.home = {i: self.foot[i] for i in (0, 1, 2, 3)}
 
     def shift_body(self, swing_leg: int, body_shift_y: float, duration: float):
         """Shift 'body' laterally by moving all feet (in local y) accordingly.
@@ -397,7 +406,19 @@ class CrawlDriver:
             dx_local = body_x_to_local_x(leg_id, body_dx_leg)
             dy_local = body_y_to_local_y(leg_id, body_dy)
 
-            targets[leg_id] = (x_cur + dx_local, y_cur + dy_local, sz)
+            xt = x_cur + dx_local
+            yt = y_cur + dy_local
+
+            # Plan-A: gently pull XY back toward HOME to prevent cumulative drift.
+            if RECENTER_ENABLE:
+                hx, hy, _ = self.home.get(leg_id, (sx, sy, sz))
+                xt = xt + RECENTER_K * (hx - xt)
+                yt = yt + RECENTER_K * (hy - yt)
+
+            targets[leg_id] = (xt, yt, sz)
+
+        if RECENTER_ENABLE:
+            print(f"[RECENTER] enabled k={RECENTER_K:.3f} (targets pulled toward HOME)", flush=True)
 
         steps = max(1, int(BODYMOVE_T / MOVE_DT))
         start = {i: self.foot[i] for i in (0, 1, 2, 3)}
