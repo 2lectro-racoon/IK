@@ -38,6 +38,9 @@ LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z
 SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
 COUNTER_DX = 20.0                  # mm, temporary diagonal-leg counter in BODY X (front +)
 COUNTER_DY = 20.0                  # mm, temporary diagonal-leg counter in BODY Y (left +)
+# --- Counterweight option #2: also apply to 2nd support leg (opposite side) ---
+COUNTER2_ENABLE = True             # also counter on a 2nd support leg (opposite side)
+COUNTER2_SCALE = 0.6               # scale for the 2nd leg counter (0..1)
 STEP_FWD = 30.0                    # mm per step for forward/back command
 STEP_LAT = 30.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
@@ -65,8 +68,12 @@ FRONT_LEGS = {0, 3}                # FR, FL
 
 BACK_LEGS = {1, 2}                 # BR, BL
 
+#
 # Diagonal leg mapping (corner-to-corner)
 DIAG_LEG = {0: 2, 2: 0, 1: 3, 3: 1}  # FR<->BL, BR<->FL
+
+# Opposite-side legs (the side opposite of swing leg)
+OPPOSITE_SIDE_LEGS = {0: LEFT_LEGS, 1: LEFT_LEGS, 2: RIGHT_LEGS, 3: RIGHT_LEGS}
 
 
 # -------------------------
@@ -281,17 +288,33 @@ class CrawlDriver:
 
         diag_leg = DIAG_LEG[swing_leg]
 
-        # Temporary diagonal-leg counter: push the diagonal support foot OUTWARD in that leg's *local* XY.
+        # Second counter leg: the other support leg on the opposite side of the swing leg.
+        # Example: swing BR(1) -> opposite side is LEFT {BL,FL}; diag is FL so ctr2 is BL.
+        opp_side = OPPOSITE_SIDE_LEGS[swing_leg]
+        ctr2_leg = None
+        if COUNTER2_ENABLE:
+            cand = [lid for lid in opp_side if lid != diag_leg]
+            ctr2_leg = cand[0] if cand else None
+
+        # Temporary counter: push support feet OUTWARD in each leg's *local* XY.
         # Your local convention (per leg): (+x, +y) extends the leg outward (away from body).
-        # So we apply +COUNTER_DX/+COUNTER_DY directly in LOCAL, without BODY->LOCAL sign mapping.
         dx_ctr_local = +COUNTER_DX
         dy_ctr_local = +COUNTER_DY
 
-        # Debug: diagonal counter applied (LOCAL frame)
-        print(
-            f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} "
-            f"local_ctr=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f})"
-        )
+        dx_ctr2_local = dx_ctr_local * COUNTER2_SCALE if ctr2_leg is not None else 0.0
+        dy_ctr2_local = dy_ctr_local * COUNTER2_SCALE if ctr2_leg is not None else 0.0
+
+        # Debug: counter applied (LOCAL frame)
+        if ctr2_leg is None:
+            print(
+                f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} "
+                f"local_ctr=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f})"
+            )
+        else:
+            print(
+                f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} ctr2_leg={ctr2_leg} "
+                f"diag=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f}) ctr2=({dx_ctr2_local:+.1f},{dy_ctr2_local:+.1f})"
+            )
 
         sx, sy, sz = self.stand
         z_lift = sz + LIFT_DZ  # smaller z lifts
@@ -324,12 +347,17 @@ class CrawlDriver:
         desired_body_shift = +SHIFT_MAG if swing_leg in RIGHT_LEGS else -SHIFT_MAG
         self.shift_body(swing_leg, desired_body_shift, PHASE_T)
 
-        # 1b) TEMP COUNTER: move diagonal support foot outward (XY) to widen the support polygon
-        # while the swing leg will be lifted.
+        # 1b) TEMP COUNTER: move diagonal (and optional 2nd) support foot outward (XY)
         xd, yd, zd = self.foot[diag_leg]
         if not self.set_pose(diag_leg, xd + dx_ctr_local, yd + dy_ctr_local, zd, PHASE_T):
             self.go_stand(duration=0.3)
             return
+
+        if ctr2_leg is not None:
+            x2, y2, z2 = self.foot[ctr2_leg]
+            if not self.set_pose(ctr2_leg, x2 + dx_ctr2_local, y2 + dy_ctr2_local, z2, PHASE_T):
+                self.go_stand(duration=0.3)
+                return
 
         # 2) LIFT swing leg (only z)
         x0, y0, _ = self.foot[swing_leg]
@@ -404,7 +432,7 @@ class CrawlDriver:
         start = {i: self.foot[i] for i in (0, 1, 2, 3)}
 
         # Target x/y for each leg: remove the temporary SHIFT, and also remove the temporary
-        # diagonal-leg counter (only for diag_leg). Preserve other commanded stance motion.
+        # counter components. Preserve other commanded stance motion.
         x_target = {}
         y_target = {}
         for leg_id in (0, 1, 2, 3):
@@ -415,10 +443,13 @@ class CrawlDriver:
             y_t = y_cur - dy_local_shift
             x_t = x_cur
 
-            # Additionally remove the temporary diagonal-leg counter component
+            # Additionally remove the temporary counter components
             if leg_id == diag_leg:
                 x_t = x_t - dx_ctr_local
                 y_t = y_t - dy_ctr_local
+            if ctr2_leg is not None and leg_id == ctr2_leg:
+                x_t = x_t - dx_ctr2_local
+                y_t = y_t - dy_ctr2_local
 
             x_target[leg_id] = x_t
             y_target[leg_id] = y_t
