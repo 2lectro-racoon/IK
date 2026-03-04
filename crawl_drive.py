@@ -58,9 +58,9 @@ SWING_ARC_DZ = 15.0                # extra mm added at mid-swing for a nicer foo
 BODYMOVE_ENABLE = True
 BODYMOVE_T = 0.35                 # seconds for the body-move phase (slower than swing)
 # Use step-scaled deltas so the body move is comparable to the leg swing distance.
-BODYMOVE_FWD = 1.0                # multiplier for STEP_FWD (1.0 means same magnitude)
-BODYMOVE_LAT = 0.8                # multiplier for STEP_LAT
-BODYMOVE_YAW = 0.6                # multiplier for STEP_YAW
+BODYMOVE_FWD = 1.25               # multiplier for STEP_FWD (increase = stronger push)
+BODYMOVE_LAT = 0.9                # multiplier for STEP_LAT
+BODYMOVE_YAW = 0.7                # multiplier for STEP_YAW
 
 # (legacy) Push parameters kept for reference; not used anymore.
 PUSH_ENABLE = False
