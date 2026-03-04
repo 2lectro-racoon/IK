@@ -39,6 +39,7 @@ SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lift
 STEP_FWD = 50.0                    # mm per step for forward/back command
 STEP_LAT = 40.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
+SWING_ARC_DZ = 15.0                # extra mm added at mid-swing for a nicer foot arc (set 0 to disable)
 # STEP_FWD = 25.0                    # mm per step for forward/back command
 # STEP_LAT = 20.0                    # mm per step for left/right command
 # STEP_YAW = 20.0                    # mm per step for yaw command (as differential dx between sides)
@@ -65,6 +66,12 @@ BACK_LEGS = {1, 2}                 # BR, BL
 # -------------------------
 # Small helpers
 # -------------------------
+def smoothstep(t: float) -> float:
+    """C1 continuous easing: 3t^2 - 2t^3 (t in [0,1])."""
+    t = clampf(t, 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
 def lerp(a: float, b: float, t: float) -> float:
     return a + (b - a) * t
 
@@ -190,9 +197,10 @@ class CrawlDriver:
         steps = max(1, int(duration / MOVE_DT))
         for i in range(steps + 1):
             u = i / steps
-            xi = lerp(x0, x, u)
-            yi = lerp(y0, y, u)
-            zi = lerp(z0, z, u)
+            ue = smoothstep(u)
+            xi = lerp(x0, x, ue)
+            yi = lerp(y0, y, ue)
+            zi = lerp(z0, z, ue)
             if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
                 return False
             time.sleep(MOVE_DT)
@@ -207,10 +215,11 @@ class CrawlDriver:
         z0 = {i: self.foot[i][2] for i in (0, 1, 2, 3)}
         for s in range(steps + 1):
             u = s / steps
+            ue = smoothstep(u)
             for leg_id in (0, 1, 2, 3):
-                xi = lerp(x0[leg_id], x, u)
-                yi = lerp(y0[leg_id], y, u)
-                zi = lerp(z0[leg_id], z, u)
+                xi = lerp(x0[leg_id], x, ue)
+                yi = lerp(y0[leg_id], y, ue)
+                zi = lerp(z0[leg_id], z, ue)
                 if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
                     return False
             time.sleep(MOVE_DT)
@@ -240,12 +249,13 @@ class CrawlDriver:
         start = {i: self.foot[i] for i in (0, 1, 2, 3)}
         for s in range(steps + 1):
             u = s / steps
+            ue = smoothstep(u)
             for leg_id in (0, 1, 2, 3):
                 x0, y0, z0 = start[leg_id]
                 xt, yt, zt = targets[leg_id]
-                xi = lerp(x0, xt, u)
-                yi = lerp(y0, yt, u)
-                zi = lerp(z0, zt, u)
+                xi = lerp(x0, xt, ue)
+                yi = lerp(y0, yt, ue)
+                zi = lerp(z0, zt, ue)
                 if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
                     return
             time.sleep(MOVE_DT)
@@ -315,13 +325,19 @@ class CrawlDriver:
 
         for s in range(steps + 1):
             u = s / steps
+            ue = smoothstep(u)
 
             # swing leg
             xS0, yS0, zS0 = swing_start
             xSt, ySt, zSt = swing_target
-            xi = lerp(xS0, xSt, u)
-            yi = lerp(yS0, ySt, u)
-            zi = lerp(zS0, zSt, u)
+            xi = lerp(xS0, xSt, ue)
+            yi = lerp(yS0, ySt, ue)
+            zi = lerp(zS0, zSt, ue)
+
+            # add a gentle mid-swing arc (keeps endpoints unchanged)
+            if SWING_ARC_DZ and SWING_ARC_DZ > 0:
+                zi = zi + SWING_ARC_DZ * math.sin(math.pi * ue)
+
             if not self._try_set_leg_xyz(swing_leg, xi, yi, zi):
                 self.go_stand(duration=0.3)
                 return
@@ -330,9 +346,9 @@ class CrawlDriver:
             for leg_id in support:
                 xA0, yA0, zA0 = support_start[leg_id]
                 xAt, yAt, zAt = support_targets[leg_id]
-                xj = lerp(xA0, xAt, u)
-                yj = lerp(yA0, yAt, u)
-                zj = lerp(zA0, zAt, u)
+                xj = lerp(xA0, xAt, ue)
+                yj = lerp(yA0, yAt, ue)
+                zj = lerp(zA0, zAt, ue)
                 if not self._try_set_leg_xyz(leg_id, xj, yj, zj):
                     self.go_stand(duration=0.3)
                     return
@@ -364,11 +380,12 @@ class CrawlDriver:
 
         for s in range(steps + 1):
             u = s / steps
+            ue = smoothstep(u)
             for leg_id in (0, 1, 2, 3):
                 x0, y0, z0 = start[leg_id]
                 xi = x0
-                yi = lerp(y0, y_target[leg_id], u)
-                zi = lerp(z0, sz, u)
+                yi = lerp(y0, y_target[leg_id], ue)
+                zi = lerp(z0, sz, ue)
                 if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
                     self.go_stand(duration=0.3)
                     return
