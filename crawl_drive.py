@@ -38,7 +38,7 @@ LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z
 SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
 STEP_FWD = 50.0                    # mm per step for forward/back command
 STEP_LAT = 40.0                    # mm per step for left/right command
-STEP_YAW = 20.0                    # mm per step for yaw command (as differential dx between sides)
+STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
 # STEP_FWD = 25.0                    # mm per step for forward/back command
 # STEP_LAT = 20.0                    # mm per step for left/right command
 # STEP_YAW = 20.0                    # mm per step for yaw command (as differential dx between sides)
