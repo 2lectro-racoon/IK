@@ -14,7 +14,7 @@ from quad_api import make_default_api
 STAND_XYZ = (120.0, 70.0, -50.0)   # (x, y, z) in each leg's local A0 frame
 STEP_LEN = 30.0                   # mm (forward for the swinging leg in its local +x)
 LIFT_DZ = 25.0                    # mm (since smaller z lifts => z_lift = z_stand - LIFT_DZ)
-SHIFT_Y = 15.0                    # mm (shift body to reduce tipping when lifting one leg)
+SHIFT_Y = -15.0                    # mm (shift body to reduce tipping when lifting one leg)
 MOVE_DT = 0.04                    # seconds per interpolation step (25 Hz)
 MOVE_T = 0.6                      # seconds for each phase (shift/lift/swing/down/unshift)
 
