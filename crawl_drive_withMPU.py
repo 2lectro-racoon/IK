@@ -361,10 +361,11 @@ class CrawlDriver:
         ep = pitch_deg - pitch0_deg
 
         # Desired dz components (mm). Positive dz means lifting foot (shorter leg).
-        # NOTE: On the real robot we observed the compensation direction was inverted.
-        # Flip the sign here so the feedback pushes the body back toward level.
-        dz_roll = clampf(-IMU_STAB_K_ROLL * er, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
-        dz_pitch = clampf(-IMU_STAB_K_PITCH * ep, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
+        # Feedback direction (original):
+        #   er>0 (right-down)  -> dz_roll>0
+        #   ep>0 (front-down)  -> dz_pitch>0
+        dz_roll = clampf(IMU_STAB_K_ROLL * er, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
+        dz_pitch = clampf(IMU_STAB_K_PITCH * ep, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
 
         dbg = {
             "er": er,
