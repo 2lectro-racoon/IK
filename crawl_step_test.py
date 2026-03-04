@@ -133,7 +133,7 @@ def one_step_crawl(api, leg_id: int):
     # 2) SHIFT (reduce tipping)
     print("[PHASE] shift")
     do_shift(api, leg_id, SHIFT_Y, MOVE_T)
-
+    time.sleep(2)
     # 3) LIFT swing leg
     print("[PHASE] lift")
     move_leg(api, leg_id, sx, sy, z_lift, MOVE_T, debug=False)
