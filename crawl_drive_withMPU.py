@@ -54,7 +54,7 @@ IMU_STAB_ENABLE = True
 IMU_STAB_MAX_DZ = 15              # mm max per-leg Z adjustment
 IMU_STAB_K_ROLL = 1.8              # mm per degree roll error (right-down +)
 IMU_STAB_K_PITCH = 1.8             # mm per degree pitch error (front-down +)
-IMU_STAB_ALPHA_DZ = 0.25           # smoothing for dz commands (0..1), higher = faster
+IMU_STAB_ALPHA_DZ = 0.70           # smoothing for dz commands (0..1), higher = faster
 IMU_ZERO_SEC = 0.6                 # seconds to average roll/pitch for zero reference
 
 # -------------------------
@@ -72,7 +72,7 @@ IMU_PRINT_HZ = 5.0        # how often to print roll/pitch (Hz)
 # STEP_YAW = 20.0                    # mm per step for yaw command (as differential dx between sides)
 
 # Timing
-MOVE_DT = 0.02                     # 25 Hz interpolation
+MOVE_DT = 0.01                     # 100 Hz tick (used by stand IMU stabilization and interpolation)
 # MOVE_DT = 0.04                     # 25 Hz interpolation
 PHASE_T = 0.2                     # seconds for each phase (shift/lift/swing/down/unshift)
 # PHASE_T = 0.45                     # seconds for each phase (shift/lift/swing/down/unshift)
