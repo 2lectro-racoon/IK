@@ -35,10 +35,10 @@ from ik_3dof_a0 import IKError
 # -------------------------
 STAND_XYZ = (120.0, 70.0, -50.0)   # your current stable stand
 LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z lifts)
-SHIFT_MAG = 25.0                   # magnitude of lateral shift (mm) before lifting
-COUNTER_DX = 25.0                  # mm, temporary diagonal-leg counter in BODY X (front +)
-COUNTER_DY = 25.0                  # mm, temporary diagonal-leg counter in BODY Y (left +)
-STEP_FWD = 40.0                    # mm per step for forward/back command
+SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
+COUNTER_DX = 20.0                  # mm, temporary diagonal-leg counter in BODY X (front +)
+COUNTER_DY = 20.0                  # mm, temporary diagonal-leg counter in BODY Y (left +)
+STEP_FWD = 30.0                    # mm per step for forward/back command
 STEP_LAT = 30.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
 SWING_ARC_DZ = 15.0                # extra mm added at mid-swing for a nicer foot arc (set 0 to disable)
