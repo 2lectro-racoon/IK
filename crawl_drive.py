@@ -282,6 +282,7 @@ class CrawlDriver:
         # Forward/back sequencer (Arduino-like)
         self.fb_idx = 0
         self._fb_dir = 0  # -1 for backward, +1 for forward, 0 unknown
+        self._last_move_cmd = Cmd(0, 0, 0)  # last non-zero cmd for direction-change reset
 
     def _try_set_leg_xyz(self, leg_id: int, x: float, y: float, z: float) -> bool:
         """Set one leg target; return False if IK is unreachable."""
@@ -635,6 +636,7 @@ class CrawlDriver:
 
     def crawl_step(self, cmd: Cmd):
         """Execute one crawl step using current cmd."""
+        self._maybe_reset_on_direction_change(cmd)
         if cmd.vx == 0 and cmd.vy == 0 and cmd.wz == 0:
             # no movement requested: keep current XY (Arduino keeps state), only settle Z to stand Z.
             sx, sy, sz = self.stand
@@ -643,7 +645,7 @@ class CrawlDriver:
                 # quick settle to ground Z
                 _ = self.set_pose(leg_id, x, y, sz, duration=0.15)
             return
-
+        self._last_move_cmd = cmd
         # Forward/back special: Arduino-like sequence using side pairs (rear->front) with BODYMOVE phases.
         if cmd.vx != 0 and cmd.vy == 0 and cmd.wz == 0:
             fb_dir = +1 if cmd.vx > 0 else -1
@@ -654,7 +656,7 @@ class CrawlDriver:
                 self.order_idx = 0
                 self._crawl_order_key = "fwd" if fb_dir > 0 else "back"
                 print(f"[FB] direction change -> {'FWD' if fb_dir > 0 else 'BACK'} : reset idx + go_stand", flush=True)
-                self.go_stand(duration=0.25)
+                # self.go_stand(duration=0.25)
             self.fb_step(cmd)
             return
 
@@ -879,7 +881,32 @@ class CrawlDriver:
     
     def shutdown(self):
         self.api.go_center_pose(debug=True)
+    def _maybe_reset_on_direction_change(self, cmd: Cmd):
+        """If movement direction changed (including a/d/q/e), reset sequencers and re-center."""
+        prev = self._last_move_cmd
 
+        # Only consider non-zero movement commands.
+        if (prev.vx, prev.vy, prev.wz) == (0, 0, 0):
+            return
+        if (cmd.vx, cmd.vy, cmd.wz) == (0, 0, 0):
+            return
+
+        # If command changed, reset.
+        if (cmd.vx, cmd.vy, cmd.wz) == (prev.vx, prev.vy, prev.wz):
+            return
+
+        # Reset all sequencers to avoid phase carry-over.
+        self.fb_idx = 0
+        self.order_idx = 0
+        self._fb_dir = 0
+        self._crawl_order_key = "fwd"
+
+        print(
+            f"[RESET] cmd change {prev.vx:+d},{prev.vy:+d},{prev.wz:+d} -> "
+            f"{cmd.vx:+d},{cmd.vy:+d},{cmd.wz:+d} : go_stand + reset idx",
+            flush=True,
+        )
+        self.go_stand(duration=0.25)
 
 def main():
     
