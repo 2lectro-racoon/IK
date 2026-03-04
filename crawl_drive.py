@@ -283,8 +283,8 @@ class CrawlDriver:
 
         # Temporary diagonal-leg counter: push the diagonal support foot radially outward
         # in BODY frame (front legs get +X, back legs get -X; left legs get +Y, right legs get -Y).
-        body_dx_ctr = +COUNTER_DX if diag_leg in FRONT_LEGS else -COUNTER_DX
-        body_dy_ctr = +COUNTER_DY if diag_leg in LEFT_LEGS else -COUNTER_DY
+        body_dx_ctr = +COUNTER_DX if diag_leg in FRONT_LEGS else +COUNTER_DX
+        body_dy_ctr = +COUNTER_DY if diag_leg in LEFT_LEGS else +COUNTER_DY
         dx_ctr_local = body_x_to_local_x(diag_leg, body_dx_ctr)
         dy_ctr_local = body_y_to_local_y(diag_leg, body_dy_ctr)
 
