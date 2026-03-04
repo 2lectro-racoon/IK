@@ -838,20 +838,22 @@ def main():
                 IMU_LATEST_ROLL_DEG = rad2deg(roll)
                 IMU_LATEST_PITCH_DEG = rad2deg(pitch)
 
-                # main() while loop 안에서, roll,pitch 업데이트 직후에 추가
+                # Debug: also compute accel-only tilt and gating status
                 ax, ay, az, gx, gy, gz = afb.sensor.mpu()
-                amag = (ax*ax + ay*ay + az*az) ** 0.5
+                amag = (ax * ax + ay * ay + az * az) ** 0.5
                 use_accel = (IMU_G_MIN <= amag <= IMU_G_MAX)
+
+                # Accel-only angles (deg) using the SAME mapping as the filter
+                roll_acc_deg = rad2deg(math.atan2(ax, az))
+                pitch_acc_deg = rad2deg(math.atan2(ay, az))
 
                 if (now - last_imu_print) >= imu_print_dt:
                     last_imu_print = now
-                    print(f"[IMU] pitch={IMU_LATEST_PITCH_DEG:+6.2f}deg roll={IMU_LATEST_ROLL_DEG:+6.2f}deg | "
-                        f"|a|={amag:5.2f} use_accel={use_accel} | gx={gx:+.3f} gy={gy:+.3f}")
-                    
-                    
-                if (now - last_imu_print) >= imu_print_dt:
-                    last_imu_print = now
-                    print(f"[IMU] roll={rad2deg(roll):+6.2f} deg  pitch={rad2deg(pitch):+6.2f} deg")
+                    print(
+                        f"[IMU] filt roll={IMU_LATEST_ROLL_DEG:+6.2f} pitch={IMU_LATEST_PITCH_DEG:+6.2f} | "
+                        f"acc  roll={roll_acc_deg:+6.2f} pitch={pitch_acc_deg:+6.2f} | "
+                        f"|a|={amag:5.2f} use_accel={use_accel} | gx={gx:+.3f} gy={gy:+.3f}"
+                    )
 
                 if k is not None:
                     cmd = key_to_cmd(k)
