@@ -873,6 +873,7 @@ def main():
                 else:
                     # execute one crawl step
                     drv.crawl_step(cmd)
+                time.sleep(0.05)
 
         except KeyboardInterrupt:
             print("\n[CTRL+C] Exit")
