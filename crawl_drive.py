@@ -36,7 +36,7 @@ import ik_3dof_a0 as ikmod
 # -------------------------
 STAND_XYZ = (120.0, 70.0, -50.0)   # your current stable stand
 LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z lifts)
-SHIFT_MAG = 0.0                   # magnitude of lateral shift (mm) before lifting
+SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
 COUNTER_DX = 20.0                  # mm, temporary diagonal-leg counter in BODY X (front +)
 COUNTER_DY = 20.0                  # mm, temporary diagonal-leg counter in BODY Y (left +)
 # --- Counterweight option #2: also apply to 2nd support leg (opposite side) ---
