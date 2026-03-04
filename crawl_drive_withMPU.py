@@ -55,7 +55,15 @@ IMU_STAB_MAX_DZ = 15              # mm max per-leg Z adjustment
 IMU_STAB_K_ROLL = 1.8              # mm per degree roll error (right-down +)
 IMU_STAB_K_PITCH = 1.8             # mm per degree pitch error (front-down +)
 IMU_STAB_ALPHA_DZ = 0.70           # smoothing for dz commands (0..1), higher = faster
+
 IMU_ZERO_SEC = 0.6                 # seconds to average roll/pitch for zero reference
+
+# -------------------------
+# Gait IMU assist (phase-1): apply IMU Z compensation ONLY right after SHIFT and before LIFT
+# -------------------------
+IMU_SHIFT_ASSIST_ENABLE = True
+IMU_SHIFT_ASSIST_TICKS = 8         # number of short correction ticks after SHIFT
+IMU_SHIFT_ASSIST_MAX_DZ = 6.0      # mm clamp for this assist (keep small to avoid IK issues)
 
 # -------------------------
 # IMU filtering (MPU6050) - complementary filter
@@ -87,7 +95,17 @@ LEFT_LEGS = {2, 3}                 # BL, FL
 
 # Leg front/back sets (for mapping body-forward to local x)
 FRONT_LEGS = {0, 3}                # FR, FL
+
 BACK_LEGS = {1, 2}                 # BR, BL
+
+# -------------------------
+# IMU shared state (updated in main loop)
+# Used by CrawlDriver for gait-phase IMU assist.
+# -------------------------
+IMU_LATEST_ROLL_DEG = 0.0
+IMU_LATEST_PITCH_DEG = 0.0
+IMU_ZERO_ROLL_DEG = 0.0
+IMU_ZERO_PITCH_DEG = 0.0
 
 
 # -------------------------
@@ -397,6 +415,43 @@ class CrawlDriver:
 
         return targets, dbg
 
+    def imu_z_comp_targets_current(self, dz_state: Dict[int, float], max_dz: float) -> Tuple[Dict[int, Tuple[float, float, float]], Dict]:
+        """Compute per-leg targets keeping current x/y and adjusting ONLY z using IMU roll/pitch error.
+
+        Uses module-level globals updated in main:
+          IMU_LATEST_ROLL_DEG / IMU_LATEST_PITCH_DEG
+          IMU_ZERO_ROLL_DEG / IMU_ZERO_PITCH_DEG
+        """
+        roll_deg = IMU_LATEST_ROLL_DEG
+        pitch_deg = IMU_LATEST_PITCH_DEG
+        er = roll_deg - IMU_ZERO_ROLL_DEG
+        ep = pitch_deg - IMU_ZERO_PITCH_DEG
+
+        dz_roll = clampf(IMU_STAB_K_ROLL * er, -max_dz, max_dz)
+        dz_pitch = clampf(IMU_STAB_K_PITCH * ep, -max_dz, max_dz)
+
+        dbg = {"er": er, "ep": ep, "dz_roll": dz_roll, "dz_pitch": dz_pitch, "legs": {}}
+        targets: Dict[int, Tuple[float, float, float]] = {}
+
+        for leg_id in (0, 1, 2, 3):
+            x, y, z0 = self.foot[leg_id]
+
+            # Same sign convention as stand stabilization
+            s_side = +1 if leg_id in LEFT_LEGS else -1   # LEFT legs get +, RIGHT legs get -
+            s_fb = +1 if leg_id in BACK_LEGS else -1     # BACK legs get +, FRONT legs get -
+
+            dz_cmd = s_side * dz_roll + s_fb * dz_pitch
+            dz_cmd = clampf(dz_cmd, -max_dz, max_dz)
+
+            prev = dz_state.get(leg_id, 0.0)
+            dz_s = (1.0 - IMU_STAB_ALPHA_DZ) * prev + IMU_STAB_ALPHA_DZ * dz_cmd
+            dz_state[leg_id] = dz_s
+
+            dbg["legs"][leg_id] = {"dz_cmd": dz_cmd, "dz_s": dz_s}
+            targets[leg_id] = (x, y, z0 + dz_s)
+
+        return targets, dbg
+
     def go_stand(self, duration: float = 0.4):
         sx, sy, sz = self.stand
         _ = self.set_all(sx, sy, sz, duration)
@@ -468,6 +523,15 @@ class CrawlDriver:
         # (kept as-is for now; IMU stabilization test runs only when STOP)
         desired_body_shift = +SHIFT_MAG if swing_leg in RIGHT_LEGS else -SHIFT_MAG
         self.shift_body(swing_leg, desired_body_shift, PHASE_T)
+
+        # IMU assist (phase-1): after SHIFT and before LIFT, apply a few Z-only compensation ticks.
+        if IMU_SHIFT_ASSIST_ENABLE:
+            if not hasattr(self, "_imu_dz_state"):
+                self._imu_dz_state = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
+            for _ in range(max(0, IMU_SHIFT_ASSIST_TICKS)):
+                targets, _dbg = self.imu_z_comp_targets_current(dz_state=self._imu_dz_state, max_dz=IMU_SHIFT_ASSIST_MAX_DZ)
+                self.set_targets(targets)
+                time.sleep(MOVE_DT)
 
         # 2) LIFT swing leg (only z)
         x0, y0, _ = self.foot[swing_leg]
@@ -588,6 +652,8 @@ def main():
     print("[INFO] Keys: W/S/A/D/Q/E, other = stop. Ctrl+C to exit.")
     drv.go_stand(duration=0.6)
 
+    global IMU_LATEST_ROLL_DEG, IMU_LATEST_PITCH_DEG, IMU_ZERO_ROLL_DEG, IMU_ZERO_PITCH_DEG
+
     cmd = Cmd(0, 0, 0)
     last_key_t = 0.0
 
@@ -610,6 +676,9 @@ def main():
     pitch0_deg = s_pitch / max(1, n0)
     print(f"[IMU] Zero(ref): roll0={roll0_deg:+.2f} deg  pitch0={pitch0_deg:+.2f} deg")
 
+    IMU_ZERO_ROLL_DEG = roll0_deg
+    IMU_ZERO_PITCH_DEG = pitch0_deg
+
     dz_state: Dict[int, float] = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
 
     stab_print_dt = 0.5  # seconds (2 Hz)
@@ -623,6 +692,8 @@ def main():
 
                 # Update IMU filter each loop iteration
                 roll, pitch = imu.update_from_mpu()
+                IMU_LATEST_ROLL_DEG = rad2deg(roll)
+                IMU_LATEST_PITCH_DEG = rad2deg(pitch)
                 if (now - last_imu_print) >= imu_print_dt:
                     last_imu_print = now
                     print(f"[IMU] roll={rad2deg(roll):+6.2f} deg  pitch={rad2deg(pitch):+6.2f} deg")
