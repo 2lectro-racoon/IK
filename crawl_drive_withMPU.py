@@ -361,10 +361,10 @@ class CrawlDriver:
         ep = pitch_deg - pitch0_deg
 
         # Desired dz components (mm). Positive dz means lifting foot (shorter leg).
-        # To counter right-down roll (er>0), lengthen right legs (dz-) and shorten left legs (dz+).
-        dz_roll = clampf(IMU_STAB_K_ROLL * er, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
-        # To counter front-down pitch (ep>0), lengthen front legs (dz-) and shorten back legs (dz+).
-        dz_pitch = clampf(IMU_STAB_K_PITCH * ep, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
+        # NOTE: On the real robot we observed the compensation direction was inverted.
+        # Flip the sign here so the feedback pushes the body back toward level.
+        dz_roll = clampf(-IMU_STAB_K_ROLL * er, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
+        dz_pitch = clampf(-IMU_STAB_K_PITCH * ep, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
 
         targets: Dict[int, Tuple[float, float, float]] = {}
         for leg_id in (0, 1, 2, 3):
