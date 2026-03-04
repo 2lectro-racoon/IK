@@ -54,7 +54,7 @@ IMU_STAB_ENABLE = True
 IMU_STAB_MAX_DZ = 15              # mm max per-leg Z adjustment
 IMU_STAB_K_ROLL = 1.8              # mm per degree roll error (right-down +)
 IMU_STAB_K_PITCH = 1.8             # mm per degree pitch error (front-down +)
-IMU_STAB_ALPHA_DZ = 0.70           # smoothing for dz commands (0..1), higher = faster
+IMU_STAB_ALPHA_DZ = 0.80           # smoothing for dz commands (0..1), higher = faster
 
 IMU_ZERO_SEC = 0.6                 # seconds to average roll/pitch for zero reference
 
