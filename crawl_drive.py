@@ -35,7 +35,10 @@ from ik_3dof_a0 import IKError
 # -------------------------
 STAND_XYZ = (120.0, 70.0, -50.0)   # your current stable stand
 LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z lifts)
-SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
+SHIFT_Y_MAG = 20.0                 # body-frame lateral shift magnitude (+Y left) before lifting
+SHIFT_X_MAG = 10.0                 # body-frame fore/aft shift magnitude (+X forward) before lifting
+# Per-leg extra scaling for shift (helps compensate COM bias / unstable single-leg lifts)
+SHIFT_SCALE_BY_LEG = {0: 1.0, 1: 1.7, 2: 1.2, 3: 1.0}  # 0=FR,1=BR,2=BL,3=FL
 STEP_FWD = 50.0                    # mm per step for forward/back command
 STEP_LAT = 40.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
@@ -231,18 +234,21 @@ class CrawlDriver:
         sx, sy, sz = self.stand
         _ = self.set_all(sx, sy, sz, duration)
 
-    def shift_body(self, swing_leg: int, body_shift_y: float, duration: float):
-        """Shift 'body' laterally by moving all feet (in local y) accordingly.
+    def shift_body(self, swing_leg: int, body_shift_x: float, body_shift_y: float, duration: float):
+        """Temporarily shift the body by moving ALL feet in their local frames.
 
-        body_shift_y: + means shift body LEFT in body frame.
-        We convert to each leg's local y shift.
+        body_shift_x: body-frame +X forward (mm)
+        body_shift_y: body-frame +Y left (mm)
+
+        We map BODY -> LOCAL per leg using body_x_to_local_x / body_y_to_local_y.
         """
         # Apply to ALL legs (including swing leg) while still on ground.
         targets = {}
         for leg_id in (0, 1, 2, 3):
             x, y, z = self.foot[leg_id]
+            dx_local = body_x_to_local_x(leg_id, body_shift_x)
             dy_local = body_y_to_local_y(leg_id, body_shift_y)
-            targets[leg_id] = (x, y + dy_local, z)
+            targets[leg_id] = (x + dx_local, y + dy_local, z)
 
         # interpolate simultaneously
         steps = max(1, int(duration / MOVE_DT))
@@ -294,10 +300,13 @@ class CrawlDriver:
         else:
             body_dy_support = 0.0
 
-        # 1) SHIFT away from swing leg
-        # If swing leg is RIGHT, shift body LEFT (+Y). If swing leg is LEFT, shift body RIGHT (-Y).
-        desired_body_shift = +SHIFT_MAG if swing_leg in RIGHT_LEGS else -SHIFT_MAG
-        self.shift_body(swing_leg, desired_body_shift, PHASE_T)
+        # 1) SHIFT to keep COM inside the 3-leg support triangle.
+        # For RIGHT swing legs, shift body LEFT (+Y). For LEFT swing legs, shift body RIGHT (-Y).
+        # For BACK swing legs, shift body FORWARD (+X). For FRONT swing legs, shift body BACKWARD (-X).
+        scale = SHIFT_SCALE_BY_LEG.get(swing_leg, 1.0)
+        desired_body_shift_y = (+SHIFT_Y_MAG if swing_leg in RIGHT_LEGS else -SHIFT_Y_MAG) * scale
+        desired_body_shift_x = (+SHIFT_X_MAG if swing_leg in BACK_LEGS else -SHIFT_X_MAG) * scale
+        self.shift_body(swing_leg, desired_body_shift_x, desired_body_shift_y, PHASE_T)
 
         # 2) LIFT swing leg (only z)
         x0, y0, _ = self.foot[swing_leg]
@@ -365,17 +374,20 @@ class CrawlDriver:
             self.go_stand(duration=0.3)
             return
 
-        # 5) UNSHIFT: remove ONLY the temporary shift (phase 1), preserving commanded y changes.
-        # During shift_body() we added dy_local = body_y_to_local_y(leg_id, desired_body_shift).
-        # Here we subtract the same amount, while keeping x as-is and returning z to stand.
+        # 5) UNSHIFT: remove BOTH the temporary X and Y shift components (phase 1), preserving commanded changes.
+        # During shift_body() we added dx_local, dy_local = body_x_to_local_x(...), body_y_to_local_y(...)
+        # Here we subtract the same amounts, returning z to stand.
         steps = max(1, int(PHASE_T / MOVE_DT))
         start = {i: self.foot[i] for i in (0, 1, 2, 3)}
 
-        # Target y for each leg: current y minus the temporary shift component
+        # Targets per leg: current (x,y) minus the temporary shift components
+        x_target = {}
         y_target = {}
         for leg_id in (0, 1, 2, 3):
-            dy_local_shift = body_y_to_local_y(leg_id, desired_body_shift)
-            _, y_cur, _ = self.foot[leg_id]
+            dx_local_shift = body_x_to_local_x(leg_id, desired_body_shift_x)
+            dy_local_shift = body_y_to_local_y(leg_id, desired_body_shift_y)
+            x_cur, y_cur, _ = self.foot[leg_id]
+            x_target[leg_id] = x_cur - dx_local_shift
             y_target[leg_id] = y_cur - dy_local_shift
 
         for s in range(steps + 1):
@@ -383,7 +395,7 @@ class CrawlDriver:
             ue = smoothstep(u)
             for leg_id in (0, 1, 2, 3):
                 x0, y0, z0 = start[leg_id]
-                xi = x0
+                xi = lerp(x0, x_target[leg_id], ue)
                 yi = lerp(y0, y_target[leg_id], ue)
                 zi = lerp(z0, sz, ue)
                 if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
@@ -392,8 +404,7 @@ class CrawlDriver:
             time.sleep(MOVE_DT)
 
         for leg_id in (0, 1, 2, 3):
-            x0, _, _ = self.foot[leg_id]
-            self.foot[leg_id] = (x0, y_target[leg_id], sz)
+            self.foot[leg_id] = (x_target[leg_id], y_target[leg_id], sz)
     def reset(self):
         self.api.leg_reset()
         time.sleep(15)
