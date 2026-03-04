@@ -146,9 +146,9 @@ def key_to_cmd(k: str) -> Cmd:
     if k == "s":
         return Cmd(vx=-1, vy=0, wz=0)
     if k == "a":
-        return Cmd(vx=0, vy=+1, wz=0)  # left
+        return Cmd(vx=0, vy=-1, wz=0)  # left
     if k == "d":
-        return Cmd(vx=0, vy=-1, wz=0)  # right
+        return Cmd(vx=0, vy=+1, wz=0)  # right
     if k == "q":
         return Cmd(vx=0, vy=0, wz=+1)  # CCW
     if k == "e":
