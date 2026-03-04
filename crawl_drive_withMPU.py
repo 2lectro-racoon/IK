@@ -51,7 +51,7 @@ SWING_ARC_DZ = 15.0                # extra mm added at mid-swing for a nicer foo
 # need to DECREASE Z on that side (lengthen leg) and INCREASE Z on the opposite side.
 # -------------------------
 IMU_STAB_ENABLE = True
-IMU_STAB_MAX_DZ = 4.0              # mm max per-leg Z adjustment
+IMU_STAB_MAX_DZ = 15              # mm max per-leg Z adjustment
 IMU_STAB_K_ROLL = 1.8              # mm per degree roll error (right-down +)
 IMU_STAB_K_PITCH = 1.8             # mm per degree pitch error (front-down +)
 IMU_STAB_ALPHA_DZ = 0.25           # smoothing for dz commands (0..1), higher = faster
