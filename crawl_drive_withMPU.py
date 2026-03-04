@@ -837,6 +837,18 @@ def main():
                 roll, pitch = imu.update_from_mpu()
                 IMU_LATEST_ROLL_DEG = rad2deg(roll)
                 IMU_LATEST_PITCH_DEG = rad2deg(pitch)
+
+                # main() while loop 안에서, roll,pitch 업데이트 직후에 추가
+                ax, ay, az, gx, gy, gz = afb.sensor.mpu()
+                amag = (ax*ax + ay*ay + az*az) ** 0.5
+                use_accel = (IMU_G_MIN <= amag <= IMU_G_MAX)
+
+                if (now - last_imu_print) >= imu_print_dt:
+                    last_imu_print = now
+                    print(f"[IMU] pitch={IMU_LATEST_PITCH_DEG:+6.2f}deg roll={IMU_LATEST_ROLL_DEG:+6.2f}deg | "
+                        f"|a|={amag:5.2f} use_accel={use_accel} | gx={gx:+.3f} gy={gy:+.3f}")
+                    
+                    
                 if (now - last_imu_print) >= imu_print_dt:
                     last_imu_print = now
                     print(f"[IMU] roll={rad2deg(roll):+6.2f} deg  pitch={rad2deg(pitch):+6.2f} deg")
