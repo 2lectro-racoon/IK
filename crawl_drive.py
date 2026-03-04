@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import Dict, Tuple
 
 from quad_api import make_default_api
+from ik_3dof_a0 import IKError
 
 
 # -------------------------
@@ -175,7 +176,16 @@ class CrawlDriver:
 
         self.order_idx = 0
 
-    def set_pose(self, leg_id: int, x: float, y: float, z: float, duration: float):
+    def _try_set_leg_xyz(self, leg_id: int, x: float, y: float, z: float) -> bool:
+        """Set one leg target; return False if IK is unreachable."""
+        try:
+            self.api.set_leg_xyz(leg_id, x, y, z, debug=False)
+            return True
+        except IKError as e:
+            print(f"[IKError] leg={leg_id} target=({x:.1f},{y:.1f},{z:.1f}) -> {e}")
+            return False
+
+    def set_pose(self, leg_id: int, x: float, y: float, z: float, duration: float) -> bool:
         x0, y0, z0 = self.foot[leg_id]
         steps = max(1, int(duration / MOVE_DT))
         for i in range(steps + 1):
@@ -183,11 +193,13 @@ class CrawlDriver:
             xi = lerp(x0, x, u)
             yi = lerp(y0, y, u)
             zi = lerp(z0, z, u)
-            self.api.set_leg_xyz(leg_id, xi, yi, zi, debug=False)
+            if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
+                return False
             time.sleep(MOVE_DT)
         self.foot[leg_id] = (x, y, z)
+        return True
 
-    def set_all(self, x: float, y: float, z: float, duration: float):
+    def set_all(self, x: float, y: float, z: float, duration: float) -> bool:
         # smooth all legs from current positions
         steps = max(1, int(duration / MOVE_DT))
         x0 = {i: self.foot[i][0] for i in (0, 1, 2, 3)}
@@ -199,14 +211,16 @@ class CrawlDriver:
                 xi = lerp(x0[leg_id], x, u)
                 yi = lerp(y0[leg_id], y, u)
                 zi = lerp(z0[leg_id], z, u)
-                self.api.set_leg_xyz(leg_id, xi, yi, zi, debug=False)
+                if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
+                    return False
             time.sleep(MOVE_DT)
         for leg_id in (0, 1, 2, 3):
             self.foot[leg_id] = (x, y, z)
+        return True
 
     def go_stand(self, duration: float = 0.4):
         sx, sy, sz = self.stand
-        self.set_all(sx, sy, sz, duration)
+        _ = self.set_all(sx, sy, sz, duration)
 
     def shift_body(self, swing_leg: int, body_shift_y: float, duration: float):
         """Shift 'body' laterally by moving all feet (in local y) accordingly.
@@ -232,7 +246,8 @@ class CrawlDriver:
                 xi = lerp(x0, xt, u)
                 yi = lerp(y0, yt, u)
                 zi = lerp(z0, zt, u)
-                self.api.set_leg_xyz(leg_id, xi, yi, zi, debug=False)
+                if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
+                    return
             time.sleep(MOVE_DT)
 
         for leg_id in (0, 1, 2, 3):
@@ -276,7 +291,9 @@ class CrawlDriver:
 
         # 2) LIFT swing leg (only z)
         x0, y0, _ = self.foot[swing_leg]
-        self.set_pose(swing_leg, x0, y0, z_lift, PHASE_T)
+        if not self.set_pose(swing_leg, x0, y0, z_lift, PHASE_T):
+            self.go_stand(duration=0.3)
+            return
 
         # 3) SWING: move swing leg to new x/y while keeping lifted z.
         # Simultaneously move support legs a little opposite (stance).
@@ -305,7 +322,9 @@ class CrawlDriver:
             xi = lerp(xS0, xSt, u)
             yi = lerp(yS0, ySt, u)
             zi = lerp(zS0, zSt, u)
-            self.api.set_leg_xyz(swing_leg, xi, yi, zi, debug=False)
+            if not self._try_set_leg_xyz(swing_leg, xi, yi, zi):
+                self.go_stand(duration=0.3)
+                return
 
             # support legs
             for leg_id in support:
@@ -314,7 +333,9 @@ class CrawlDriver:
                 xj = lerp(xA0, xAt, u)
                 yj = lerp(yA0, yAt, u)
                 zj = lerp(zA0, zAt, u)
-                self.api.set_leg_xyz(leg_id, xj, yj, zj, debug=False)
+                if not self._try_set_leg_xyz(leg_id, xj, yj, zj):
+                    self.go_stand(duration=0.3)
+                    return
 
             time.sleep(MOVE_DT)
 
@@ -324,7 +345,9 @@ class CrawlDriver:
 
         # 4) TOUCHDOWN swing leg back to stand z (keep x/y)
         x1, y1, _ = self.foot[swing_leg]
-        self.set_pose(swing_leg, x1, y1, sz, PHASE_T)
+        if not self.set_pose(swing_leg, x1, y1, sz, PHASE_T):
+            self.go_stand(duration=0.3)
+            return
 
         # 5) UNSHIFT: remove ONLY the temporary shift (phase 1), preserving commanded y changes.
         # During shift_body() we added dy_local = body_y_to_local_y(leg_id, desired_body_shift).
@@ -346,7 +369,9 @@ class CrawlDriver:
                 xi = x0
                 yi = lerp(y0, y_target[leg_id], u)
                 zi = lerp(z0, sz, u)
-                self.api.set_leg_xyz(leg_id, xi, yi, zi, debug=False)
+                if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
+                    self.go_stand(duration=0.3)
+                    return
             time.sleep(MOVE_DT)
 
         for leg_id in (0, 1, 2, 3):
