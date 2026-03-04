@@ -36,7 +36,7 @@ from ik_3dof_a0 import IKError
 STAND_XYZ = (120.0, 70.0, -50.0)   # your current stable stand
 LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z lifts)
 SHIFT_Y_MAG = 20.0                 # body-frame lateral shift magnitude (+Y left) before lifting
-SHIFT_X_MAG = 10.0                 # body-frame fore/aft shift magnitude (+X forward) before lifting
+SHIFT_X_MAG = 15.0                 # body-frame fore/aft shift magnitude (+X forward) before lifting
 # Per-leg extra scaling for shift (helps compensate COM bias / unstable single-leg lifts)
 SHIFT_SCALE_BY_LEG = {0: 1.0, 1: 1.7, 2: 1.2, 3: 1.0}  # 0=FR,1=BR,2=BL,3=FL
 STEP_FWD = 50.0                    # mm per step for forward/back command
