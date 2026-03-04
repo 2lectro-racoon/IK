@@ -696,7 +696,7 @@ def main():
                 IMU_LATEST_PITCH_DEG = rad2deg(pitch)
                 if (now - last_imu_print) >= imu_print_dt:
                     last_imu_print = now
-                    print(f"[IMU] roll={rad2deg(roll):+6.2f} deg  pitch={rad2deg(pitch):+6.2f} deg")
+                    # print(f"[IMU] roll={rad2deg(roll):+6.2f} deg  pitch={rad2deg(pitch):+6.2f} deg")
 
                 if k is not None:
                     cmd = key_to_cmd(k)
@@ -721,10 +721,10 @@ def main():
                         dzr = dbg["dz_roll"]
                         dzp = dbg["dz_pitch"]
                         legs = dbg["legs"]
-                        print(f"[STAB] roll_err={er:+6.2f}deg pitch_err={ep:+6.2f}deg | dz_roll={dzr:+5.2f} dz_pitch={dzp:+5.2f}")
+                        # print(f"[STAB] roll_err={er:+6.2f}deg pitch_err={ep:+6.2f}deg | dz_roll={dzr:+5.2f} dz_pitch={dzp:+5.2f}")
                         for leg_id in (0, 1, 2, 3):
                             info = legs.get(leg_id, {})
-                            print(f"[STAB] leg{leg_id} dz_cmd={info.get('dz_cmd', 0.0):+5.2f} dz_s={info.get('dz_s', 0.0):+5.2f}")
+                            # print(f"[STAB] leg{leg_id} dz_cmd={info.get('dz_cmd', 0.0):+5.2f} dz_s={info.get('dz_s', 0.0):+5.2f}")
 
                     time.sleep(MOVE_DT)
                 else:
