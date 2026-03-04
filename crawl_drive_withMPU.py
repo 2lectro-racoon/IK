@@ -63,7 +63,7 @@ IMU_ZERO_SEC = 0.6                 # seconds to average roll/pitch for zero refe
 # -------------------------
 IMU_SHIFT_ASSIST_ENABLE = True
 IMU_SHIFT_ASSIST_TICKS = 8         # number of short correction ticks after SHIFT
-IMU_SHIFT_ASSIST_MAX_DZ = 6.0      # mm clamp for this assist (keep small to avoid IK issues)
+IMU_SHIFT_ASSIST_MAX_DZ = 10.0      # mm clamp for this assist (keep small to avoid IK issues)
 
 # -------------------------
 # Gait IMU assist (phase-2): apply IMU Z compensation to STANCE legs during LIFT+SWING
