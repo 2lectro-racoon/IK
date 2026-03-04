@@ -178,6 +178,8 @@ class QuadLegAPI:
 
         if debug:
             print("[INFO] Done.\n")
+    def leg_reset(self) -> None:
+        afb.gpio.reset()
 
 
 # -----------------------------

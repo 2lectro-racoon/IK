@@ -347,13 +347,18 @@ class CrawlDriver:
         for leg_id in (0, 1, 2, 3):
             x0, _, _ = self.foot[leg_id]
             self.foot[leg_id] = (x0, y_target[leg_id], sz)
-
+    def reset(self):
+        self.api.leg_reset()
+    
     def shutdown(self):
         self.api.go_center_pose(debug=True)
 
 
 def main():
+    
     drv = CrawlDriver()
+    drv.reset()
+    time.sleep(15)
     print("[INFO] Stand pose:", STAND_XYZ)
     print("[INFO] Keys: W/S/A/D/Q/E, other = stop. Ctrl+C to exit.")
     drv.go_stand(duration=0.6)
