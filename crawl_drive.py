@@ -344,6 +344,7 @@ def main():
         try:
             while True:
                 k = kr.read_key()
+                print(k)
                 now = time.time()
 
                 if k is not None:
