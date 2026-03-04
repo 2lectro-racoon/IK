@@ -36,8 +36,8 @@ from ik_3dof_a0 import IKError
 STAND_XYZ = (120.0, 70.0, -50.0)   # your current stable stand
 LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z lifts)
 SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
-COUNTER_DX = 10.0                  # mm, temporary diagonal-leg counter in BODY X (front +)
-COUNTER_DY = 10.0                  # mm, temporary diagonal-leg counter in BODY Y (left +)
+COUNTER_DX = 15.0                  # mm, temporary diagonal-leg counter in BODY X (front +)
+COUNTER_DY = 15.0                  # mm, temporary diagonal-leg counter in BODY Y (left +)
 STEP_FWD = 40.0                    # mm per step for forward/back command
 STEP_LAT = 30.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
@@ -283,8 +283,8 @@ class CrawlDriver:
 
         # Temporary diagonal-leg counter: push the diagonal support foot radially outward
         # in BODY frame (front legs get +X, back legs get -X; left legs get +Y, right legs get -Y).
-        body_dx_ctr = -COUNTER_DX if diag_leg in FRONT_LEGS else +COUNTER_DX
-        body_dy_ctr = -COUNTER_DY if diag_leg in LEFT_LEGS else +COUNTER_DY
+        body_dx_ctr = 0-COUNTER_DX if diag_leg in FRONT_LEGS else -COUNTER_DX
+        body_dy_ctr = +COUNTER_DY if diag_leg in LEFT_LEGS else -COUNTER_DY
         dx_ctr_local = body_x_to_local_x(diag_leg, body_dx_ctr)
         dy_ctr_local = body_y_to_local_y(diag_leg, body_dy_ctr)
 
