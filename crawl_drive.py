@@ -41,7 +41,8 @@ STEP_YAW = 20.0                    # mm per step for yaw command (as differentia
 
 # Timing
 MOVE_DT = 0.04                     # 25 Hz interpolation
-PHASE_T = 0.45                     # seconds for each phase (shift/lift/swing/down/unshift)
+PHASE_T = 0.2                     # seconds for each phase (shift/lift/swing/down/unshift)
+# PHASE_T = 0.45                     # seconds for each phase (shift/lift/swing/down/unshift)
 IDLE_HOLD = 0.35                   # if no key within this time -> cmd becomes 0 (stop)
 
 # Crawl order (stable): FR -> BL -> FL -> BR
@@ -349,6 +350,7 @@ class CrawlDriver:
             self.foot[leg_id] = (x0, y_target[leg_id], sz)
     def reset(self):
         self.api.leg_reset()
+        time.sleep(15)
     
     def shutdown(self):
         self.api.go_center_pose(debug=True)
@@ -358,7 +360,6 @@ def main():
     
     drv = CrawlDriver()
     drv.reset()
-    time.sleep(15)
     print("[INFO] Stand pose:", STAND_XYZ)
     print("[INFO] Keys: W/S/A/D/Q/E, other = stop. Ctrl+C to exit.")
     drv.go_stand(duration=0.6)
