@@ -910,7 +910,8 @@ def main():
     s_pitch = 0.0
     n0 = 0
     while (time.time() - t0) < IMU_ZERO_SEC:
-        r, p = imu.update_from_mpu()
+        ax, ay, az, gx, gy, gz = afb.sensor.mpu()
+        r, p = imu.update(ax, ay, az, gx, gy, gz, now=time.time())
         s_roll += rad2deg(r)
         s_pitch += rad2deg(p)
         n0 += 1
@@ -933,13 +934,13 @@ def main():
                 k = kr.drain_last_key()
                 now = time.time()
 
-                # Update IMU filter each loop iteration
-                roll, pitch = imu.update_from_mpu()
+                # Read MPU once per loop, use the same sample for filter + debug
+                ax, ay, az, gx, gy, gz = afb.sensor.mpu()
+                roll, pitch = imu.update(ax, ay, az, gx, gy, gz, now=now)
                 IMU_LATEST_ROLL_DEG = rad2deg(roll)
                 IMU_LATEST_PITCH_DEG = rad2deg(pitch)
 
-                # Debug: also compute accel-only tilt and gating status
-                ax, ay, az, gx, gy, gz = afb.sensor.mpu()
+                # Debug: compute accel-only tilt and gating status from the SAME sample
                 amag = (ax * ax + ay * ay + az * az) ** 0.5
                 use_accel = (IMU_G_MIN <= amag <= IMU_G_MAX)
 
