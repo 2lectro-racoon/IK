@@ -34,7 +34,7 @@ import ik_3dof_a0 as ikmod
 # -------------------------
 # Tunable parameters
 # -------------------------
-STAND_XYZ = (80.0, 120.0, -50.0)   # your current stable stand
+STAND_XYZ = (60.0, 120.0, -50.0)   # your current stable stand
 LIFT_DZ = 60.0                     # lift: z_lift = z_stand + LIFT_DZ (bigger z lifts)
 SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
 # --- Counterweight option #1: diagonal counter in X/Y/Z (local) ---
