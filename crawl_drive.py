@@ -47,7 +47,15 @@ COUNTER2_SCALE = 0.6               # scale for the 2nd leg counter (0..1)
 STEP_FWD = 30.0                    # mm per step for forward/back command
 STEP_LAT = 30.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
+# SWING arc
 SWING_ARC_DZ = 15.0                # extra mm added at mid-swing for a nicer foot arc (set 0 to disable)
+
+# Stance push (after touchdown): move all feet opposite to command to create a "push" feel
+PUSH_ENABLE = True
+PUSH_T = 0.25                     # seconds for the stance push phase
+PUSH_FWD = 20.0                   # mm per step of forward/back push (body frame)
+PUSH_LAT = 12.0                   # mm per step of left/right push (body frame)
+PUSH_YAW = 15.0                   # mm per step of yaw push (body frame)
 # STEP_FWD = 25.0                    # mm per step for forward/back command
 # STEP_LAT = 20.0                    # mm per step for left/right command
 # STEP_YAW = 20.0                    # mm per step for yaw command (as differential dx between sides)
@@ -498,6 +506,44 @@ class CrawlDriver:
         if not self.set_pose(swing_leg, x1, y1, sz, PHASE_T):
             self.go_stand(duration=0.3)
             return
+
+        # 4b) PUSH (stance sweep): with all feet on the ground, move feet opposite to command
+        # to create a clear "push" feeling (body advances while feet sweep back).
+        if PUSH_ENABLE and (cmd.vx != 0 or cmd.vy != 0 or cmd.wz != 0):
+            # Opposite of commanded BODY motion
+            body_dx_push = -(cmd.vx * PUSH_FWD)
+            body_dy_push = -(cmd.vy * PUSH_LAT)
+            body_dx_yaw_push = -(cmd.wz * PUSH_YAW)
+
+            push_targets: Dict[int, Tuple[float, float, float]] = {}
+            for leg_id in (0, 1, 2, 3):
+                x_cur, y_cur, z_cur = self.foot[leg_id]
+
+                # Include yaw differential per side in BODY frame, then convert to this leg's LOCAL.
+                body_dx_leg = body_dx_push + body_dx_yaw_push * side_sign(leg_id)
+                dx_local = body_x_to_local_x(leg_id, body_dx_leg)
+                dy_local = body_y_to_local_y(leg_id, body_dy_push)
+
+                push_targets[leg_id] = (x_cur + dx_local, y_cur + dy_local, sz)
+
+            steps = max(1, int(PUSH_T / MOVE_DT))
+            start = {i: self.foot[i] for i in (0, 1, 2, 3)}
+            for s in range(steps + 1):
+                u = s / steps
+                ue = smoothstep(u)
+                for leg_id in (0, 1, 2, 3):
+                    x0p, y0p, z0p = start[leg_id]
+                    xtp, ytp, ztp = push_targets[leg_id]
+                    xi = lerp(x0p, xtp, ue)
+                    yi = lerp(y0p, ytp, ue)
+                    zi = lerp(z0p, ztp, ue)
+                    if not self._try_set_leg_xyz(leg_id, xi, yi, zi):
+                        self.go_stand(duration=0.3)
+                        return
+                time.sleep(MOVE_DT)
+
+            for leg_id in (0, 1, 2, 3):
+                self.foot[leg_id] = push_targets[leg_id]
 
         # 5) UNSHIFT: remove ONLY the temporary shift (phase 1), preserving commanded y changes.
         # During shift_body() we added dy_local = body_y_to_local_y(leg_id, desired_body_shift).
