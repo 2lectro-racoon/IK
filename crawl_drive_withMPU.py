@@ -10,7 +10,7 @@
 # Notes:
 # - Uses quad_api.make_default_api() (do not modify quad_api.py)
 # - Uses a simple crawl cycle with shift->lift->swing->touchdown->unshift
-# - z direction: in your robot, "smaller z lifts" (you already confirmed)
+# - z direction: in your robot, "larger z lifts" (confirmed)
 #
 # Run:
 #   python3 crawl_drive.py
@@ -35,13 +35,27 @@ from ik_3dof_a0 import IKError
 # Tunable parameters
 # -------------------------
 STAND_XYZ = (120.0, 70.0, -50.0)   # your current stable stand
-LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z lifts)
+LIFT_DZ = 60.0                     # lift: z_lift = z_stand + LIFT_DZ (larger z lifts)
 SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
 STEP_FWD = 40.0                    # mm per step for forward/back command
 STEP_LAT = 30.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
 # SWING_ARC_DZ = 15.0                # extra mm added at mid-swing for a nicer foot arc (set 0 to disable)
 SWING_ARC_DZ = 15.0                # extra mm added at mid-swing for a nicer foot arc (set 0 to disable)
+
+# -------------------------
+# Stand-only IMU stabilization (test mode)
+# When cmd is STOP (vx=vy=wz=0), we keep the robot in stand and apply small per-leg Z deltas
+# based on IMU roll/pitch error relative to a stored "zero" reference.
+# Note: Since larger Z lifts the foot (shortens leg), to raise a low side of the body we generally
+# need to DECREASE Z on that side (lengthen leg) and INCREASE Z on the opposite side.
+# -------------------------
+IMU_STAB_ENABLE = True
+IMU_STAB_MAX_DZ = 4.0              # mm max per-leg Z adjustment
+IMU_STAB_K_ROLL = 1.8              # mm per degree roll error (right-down +)
+IMU_STAB_K_PITCH = 1.8             # mm per degree pitch error (front-down +)
+IMU_STAB_ALPHA_DZ = 0.25           # smoothing for dz commands (0..1), higher = faster
+IMU_ZERO_SEC = 0.6                 # seconds to average roll/pitch for zero reference
 
 # -------------------------
 # IMU filtering (MPU6050) - complementary filter
@@ -322,6 +336,56 @@ class CrawlDriver:
             self.foot[leg_id] = (x, y, z)
         return True
 
+    def set_targets(self, targets: Dict[int, Tuple[float, float, float]]) -> bool:
+        """Set multiple legs to explicit (x,y,z) targets (no interpolation)."""
+        ok = True
+        for leg_id, (x, y, z) in targets.items():
+            if not self._try_set_leg_xyz(leg_id, x, y, z):
+                ok = False
+        if ok:
+            for leg_id, xyz in targets.items():
+                self.foot[leg_id] = xyz
+        return ok
+
+    def imu_stand_targets(self, roll_deg: float, pitch_deg: float, roll0_deg: float, pitch0_deg: float, dz_state: Dict[int, float]) -> Dict[int, Tuple[float, float, float]]:
+        """Compute per-leg stand targets with small Z adjustments from IMU.
+
+        roll_deg  : filtered roll in degrees (right-down +)
+        pitch_deg : filtered pitch in degrees (front-down +)
+        roll0_deg/pitch0_deg : stored zero reference
+
+        dz_state: per-leg smoothed dz state (mm), updated in-place by caller.
+        """
+        # Error relative to zero reference
+        er = roll_deg - roll0_deg
+        ep = pitch_deg - pitch0_deg
+
+        # Desired dz components (mm). Positive dz means lifting foot (shorter leg).
+        # To counter right-down roll (er>0), lengthen right legs (dz-) and shorten left legs (dz+).
+        dz_roll = clampf(IMU_STAB_K_ROLL * er, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
+        # To counter front-down pitch (ep>0), lengthen front legs (dz-) and shorten back legs (dz+).
+        dz_pitch = clampf(IMU_STAB_K_PITCH * ep, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
+
+        targets: Dict[int, Tuple[float, float, float]] = {}
+        for leg_id in (0, 1, 2, 3):
+            x, y, _ = self.stand  # keep stand x/y
+            # Sign per side/front-back
+            s_side = +1 if leg_id in LEFT_LEGS else -1   # LEFT legs get +, RIGHT legs get -
+            s_fb = +1 if leg_id in BACK_LEGS else -1     # BACK legs get +, FRONT legs get -
+
+            dz_cmd = s_side * dz_roll + s_fb * dz_pitch
+            dz_cmd = clampf(dz_cmd, -IMU_STAB_MAX_DZ, IMU_STAB_MAX_DZ)
+
+            # Smooth per-leg dz to avoid chatter
+            prev = dz_state.get(leg_id, 0.0)
+            dz_s = (1.0 - IMU_STAB_ALPHA_DZ) * prev + IMU_STAB_ALPHA_DZ * dz_cmd
+            dz_state[leg_id] = dz_s
+
+            z = self.stand[2] + dz_s
+            targets[leg_id] = (x, y, z)
+
+        return targets
+
     def go_stand(self, duration: float = 0.4):
         sx, sy, sz = self.stand
         _ = self.set_all(sx, sy, sz, duration)
@@ -369,7 +433,7 @@ class CrawlDriver:
         self.order_idx += 1
 
         sx, sy, sz = self.stand
-        z_lift = sz + LIFT_DZ  # smaller z lifts
+        z_lift = sz + LIFT_DZ  # larger z lifts
 
         # Convert cmd into per-leg swing delta.
         # We treat commands in BODY frame first, then convert to each leg's LOCAL frame.
@@ -389,8 +453,8 @@ class CrawlDriver:
         else:
             body_dy_support = 0.0
 
-        # 1) SHIFT away from swing leg
-        # If swing leg is RIGHT, shift body LEFT (+Y). If swing leg is LEFT, shift body RIGHT (-Y).
+        # 1) SHIFT away from swing leg (body-frame Y logic depends on your mapping)
+        # (kept as-is for now; IMU stabilization test runs only when STOP)
         desired_body_shift = +SHIFT_MAG if swing_leg in RIGHT_LEGS else -SHIFT_MAG
         self.shift_body(swing_leg, desired_body_shift, PHASE_T)
 
@@ -519,6 +583,24 @@ def main():
     imu_print_dt = 1.0 / max(0.1, IMU_PRINT_HZ)
     last_imu_print = 0.0
 
+    # Capture IMU zero reference in stand pose (average a short window)
+    print(f"[IMU] Capturing zero reference for {IMU_ZERO_SEC:.1f}s in stand...")
+    t0 = time.time()
+    s_roll = 0.0
+    s_pitch = 0.0
+    n0 = 0
+    while (time.time() - t0) < IMU_ZERO_SEC:
+        r, p = imu.update_from_mpu()
+        s_roll += rad2deg(r)
+        s_pitch += rad2deg(p)
+        n0 += 1
+        time.sleep(0.01)
+    roll0_deg = s_roll / max(1, n0)
+    pitch0_deg = s_pitch / max(1, n0)
+    print(f"[IMU] Zero(ref): roll0={roll0_deg:+.2f} deg  pitch0={pitch0_deg:+.2f} deg")
+
+    dz_state: Dict[int, float] = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
+
     with KeyReader() as kr:
         try:
             while True:
@@ -539,8 +621,17 @@ def main():
                 if (now - last_key_t) > IDLE_HOLD:
                     cmd = Cmd(0, 0, 0)
 
-                # execute one crawl step (or hold stand if stopped)
-                drv.crawl_step(cmd)
+                # If STOP, run stand-only IMU stabilization test (no gait).
+                if IMU_STAB_ENABLE and cmd.vx == 0 and cmd.vy == 0 and cmd.wz == 0:
+                    # Use the most recent filtered angles (roll/pitch are in radians)
+                    roll_deg = rad2deg(roll)
+                    pitch_deg = rad2deg(pitch)
+                    targets = drv.imu_stand_targets(roll_deg, pitch_deg, roll0_deg, pitch0_deg, dz_state)
+                    drv.set_targets(targets)
+                    time.sleep(MOVE_DT)
+                else:
+                    # execute one crawl step
+                    drv.crawl_step(cmd)
 
         except KeyboardInterrupt:
             print("\n[CTRL+C] Exit")
