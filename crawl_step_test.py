@@ -120,7 +120,7 @@ def one_step_crawl(api, leg_id: int):
     shift -> lift -> swing forward -> touchdown -> unshift
     """
     sx, sy, sz = STAND_XYZ
-    z_lift = sz - LIFT_DZ          # smaller z lifts (your system)
+    z_lift = sz + LIFT_DZ          # smaller z lifts (your system)
     x_fwd = sx + STEP_LEN
 
     print(f"[STEP] stand={STAND_XYZ}  lift_z={z_lift}  step_len={STEP_LEN}  shift_y={SHIFT_Y}")
