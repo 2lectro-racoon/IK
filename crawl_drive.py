@@ -279,8 +279,9 @@ class CrawlDriver:
 
         self.order_idx = 0
         self._crawl_order_key = "fwd"  # track which order is active (fwd/back) for non-FB gait
-        # Forward/back sequencer (Arduino-like): BL -> FL -> PUSH -> BR -> FR -> PUSH
+        # Forward/back sequencer (Arduino-like)
         self.fb_idx = 0
+        self._fb_dir = 0  # -1 for backward, +1 for forward, 0 unknown
 
     def _try_set_leg_xyz(self, leg_id: int, x: float, y: float, z: float) -> bool:
         """Set one leg target; return False if IK is unreachable."""
@@ -573,9 +574,14 @@ class CrawlDriver:
     def fb_step(self, cmd: Cmd):
         """Arduino-like forward/back sequence (side pair, rear->front, then body-move).
 
-        Sequence (repeats): BL -> FL -> BODYMOVE -> BR -> FR -> BODYMOVE
+        Sequence (repeats):
+          - Forward (vx>0):  BL -> FL -> BODYMOVE -> BR -> FR -> BODYMOVE
+          - Backward(vx<0):  BR -> FR -> BODYMOVE -> BL -> FL -> BODYMOVE
         """
-        seq = [2, 3, -1, 1, 0, -1]  # -1 means BODYMOVE-only
+        if cmd.vx >= 0:
+            seq = [2, 3, -1, 1, 0, -1]  # forward
+        else:
+            seq = [1, 0, -1, 2, 3, -1]  # backward
         item = seq[self.fb_idx % len(seq)]
         self.fb_idx += 1
 
@@ -631,8 +637,17 @@ class CrawlDriver:
                 _ = self.set_pose(leg_id, x, y, sz, duration=0.15)
             return
 
-        # Forward/back special: Arduino-like sequence using side pairs (rear->front) with PUSH phases.
+        # Forward/back special: Arduino-like sequence using side pairs (rear->front) with BODYMOVE phases.
         if cmd.vx != 0 and cmd.vy == 0 and cmd.wz == 0:
+            fb_dir = +1 if cmd.vx > 0 else -1
+            if fb_dir != self._fb_dir:
+                # Direction changed: reset sequencing and re-center to stand to avoid phase carry-over.
+                self._fb_dir = fb_dir
+                self.fb_idx = 0
+                self.order_idx = 0
+                self._crawl_order_key = "fwd" if fb_dir > 0 else "back"
+                print(f"[FB] direction change -> {'FWD' if fb_dir > 0 else 'BACK'} : reset idx + go_stand", flush=True)
+                self.go_stand(duration=0.25)
             self.fb_step(cmd)
             return
 
