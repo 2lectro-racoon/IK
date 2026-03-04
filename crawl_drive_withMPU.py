@@ -66,6 +66,13 @@ IMU_SHIFT_ASSIST_TICKS = 8         # number of short correction ticks after SHIF
 IMU_SHIFT_ASSIST_MAX_DZ = 6.0      # mm clamp for this assist (keep small to avoid IK issues)
 
 # -------------------------
+# Gait IMU assist (phase-2): apply IMU Z compensation to STANCE legs during LIFT+SWING
+# (helps most with tipping right when a leg is lifted)
+# -------------------------
+IMU_STANCE_ASSIST_ENABLE = True
+IMU_STANCE_ASSIST_MAX_DZ = 8.0     # mm clamp during stance assist (start small)
+
+# -------------------------
 # IMU filtering (MPU6050) - complementary filter
 # Units (confirmed): accel m/s^2, gyro rad/s
 # Axis mapping (confirmed by your tests):
@@ -454,6 +461,51 @@ class CrawlDriver:
 
         return targets, dbg
 
+
+    def imu_z_comp_targets_subset(
+        self,
+        leg_ids: Tuple[int, ...],
+        dz_state: Dict[int, float],
+        max_dz: float,
+        xy_ref: Dict[int, Tuple[float, float]],
+        z_ref: Dict[int, float],
+    ) -> Tuple[Dict[int, Tuple[float, float, float]], Dict]:
+        """Compute z-comp targets for a subset of legs using absolute z_ref and provided x/y refs.
+
+        - Keeps x/y exactly as given in xy_ref
+        - Sets z = z_ref[leg] + dz_s (absolute offset; prevents drift)
+        - Uses IMU_LATEST_* and IMU_ZERO_* module-level globals
+        """
+        roll_deg = IMU_LATEST_ROLL_DEG
+        pitch_deg = IMU_LATEST_PITCH_DEG
+        er = roll_deg - IMU_ZERO_ROLL_DEG
+        ep = pitch_deg - IMU_ZERO_PITCH_DEG
+
+        dz_roll = clampf(IMU_STAB_K_ROLL * er, -max_dz, max_dz)
+        dz_pitch = clampf(IMU_STAB_K_PITCH * ep, -max_dz, max_dz)
+
+        dbg = {"er": er, "ep": ep, "dz_roll": dz_roll, "dz_pitch": dz_pitch, "legs": {}}
+        targets: Dict[int, Tuple[float, float, float]] = {}
+
+        for leg_id in leg_ids:
+            x, y = xy_ref[leg_id]
+            z_base = z_ref[leg_id]
+
+            s_side = +1 if leg_id in LEFT_LEGS else -1   # LEFT legs get +, RIGHT legs get -
+            s_fb = +1 if leg_id in BACK_LEGS else -1     # BACK legs get +, FRONT legs get -
+
+            dz_cmd = s_side * dz_roll + s_fb * dz_pitch
+            dz_cmd = clampf(dz_cmd, -max_dz, max_dz)
+
+            prev = dz_state.get(leg_id, 0.0)
+            dz_s = (1.0 - IMU_STAB_ALPHA_DZ) * prev + IMU_STAB_ALPHA_DZ * dz_cmd
+            dz_state[leg_id] = dz_s
+
+            dbg["legs"][leg_id] = {"dz_cmd": dz_cmd, "dz_s": dz_s}
+            targets[leg_id] = (x, y, z_base + dz_s)
+
+        return targets, dbg
+
     def go_stand(self, duration: float = 0.4):
         sx, sy, sz = self.stand
         _ = self.set_all(sx, sy, sz, duration)
@@ -542,10 +594,42 @@ class CrawlDriver:
                 time.sleep(MOVE_DT)
 
         # 2) LIFT swing leg (only z)
-        x0, y0, _ = self.foot[swing_leg]
-        if not self.set_pose(swing_leg, x0, y0, z_lift, PHASE_T):
-            self.go_stand(duration=0.3)
-            return
+        # While lifting, apply IMU z-compensation to STANCE legs (support legs) to reduce tipping.
+        x0, y0, zS0 = self.foot[swing_leg]
+
+        steps_lift = max(1, int(PHASE_T / MOVE_DT))
+        # Absolute baseline z for the support legs during this LIFT window
+        z_ref_lift = {leg_id: self.foot[leg_id][2] for leg_id in support}
+        # Keep a per-driver dz smoothing state for stance assist
+        if not hasattr(self, "_imu_dz_state_stance"):
+            self._imu_dz_state_stance = {0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0}
+
+        for s in range(steps_lift + 1):
+            u = s / steps_lift
+            ue = smoothstep(u)
+
+            # swing leg lift interpolation
+            zi = lerp(zS0, z_lift, ue)
+            if not self._try_set_leg_xyz(swing_leg, x0, y0, zi):
+                self.go_stand(duration=0.3)
+                return
+
+            # stance assist on support legs (z only)
+            if IMU_STANCE_ASSIST_ENABLE and support:
+                xy_ref = {leg_id: (self.foot[leg_id][0], self.foot[leg_id][1]) for leg_id in support}
+                targets_sup, _ = self.imu_z_comp_targets_subset(
+                    leg_ids=tuple(support),
+                    dz_state=self._imu_dz_state_stance,
+                    max_dz=IMU_STANCE_ASSIST_MAX_DZ,
+                    xy_ref=xy_ref,
+                    z_ref=z_ref_lift,
+                )
+                self.set_targets(targets_sup)
+
+            time.sleep(MOVE_DT)
+
+        # finalize swing leg state after lift
+        self.foot[swing_leg] = (x0, y0, z_lift)
 
         # 3) SWING: move swing leg to new x/y while keeping lifted z.
         # Simultaneously move support legs a little opposite (stance).
@@ -564,6 +648,8 @@ class CrawlDriver:
         steps = max(1, int(PHASE_T / MOVE_DT))
         swing_start = self.foot[swing_leg]
         support_start = {i: self.foot[i] for i in support}
+
+        z_ref_swing: Dict[int, float] = {}
 
         for s in range(steps + 1):
             u = s / steps
@@ -584,16 +670,43 @@ class CrawlDriver:
                 self.go_stand(duration=0.3)
                 return
 
-            # support legs
-            for leg_id in support:
-                xA0, yA0, zA0 = support_start[leg_id]
-                xAt, yAt, zAt = support_targets[leg_id]
-                xj = lerp(xA0, xAt, ue)
-                yj = lerp(yA0, yAt, ue)
-                zj = lerp(zA0, zAt, ue)
-                if not self._try_set_leg_xyz(leg_id, xj, yj, zj):
-                    self.go_stand(duration=0.3)
-                    return
+            # support legs: keep planned x/y trajectory, but apply IMU z-compensation around an absolute z_ref
+            if IMU_STANCE_ASSIST_ENABLE and support:
+                # absolute baseline z for this SWING window
+                if s == 0:
+                    z_ref_swing = {leg_id: self.foot[leg_id][2] for leg_id in support}
+
+                xy_ref = {}
+                for leg_id in support:
+                    xA0, yA0, _zA0 = support_start[leg_id]
+                    xAt, yAt, _zAt = support_targets[leg_id]
+                    xj = lerp(xA0, xAt, ue)
+                    yj = lerp(yA0, yAt, ue)
+                    xy_ref[leg_id] = (xj, yj)
+
+                targets_sup, _ = self.imu_z_comp_targets_subset(
+                    leg_ids=tuple(support),
+                    dz_state=self._imu_dz_state_stance,
+                    max_dz=IMU_STANCE_ASSIST_MAX_DZ,
+                    xy_ref=xy_ref,
+                    z_ref=z_ref_swing,
+                )
+
+                for leg_id in support:
+                    xj, yj, zj = targets_sup[leg_id]
+                    if not self._try_set_leg_xyz(leg_id, xj, yj, zj):
+                        self.go_stand(duration=0.3)
+                        return
+            else:
+                for leg_id in support:
+                    xA0, yA0, zA0 = support_start[leg_id]
+                    xAt, yAt, zAt = support_targets[leg_id]
+                    xj = lerp(xA0, xAt, ue)
+                    yj = lerp(yA0, yAt, ue)
+                    zj = lerp(zA0, zAt, ue)
+                    if not self._try_set_leg_xyz(leg_id, xj, yj, zj):
+                        self.go_stand(duration=0.3)
+                        return
 
             time.sleep(MOVE_DT)
 
