@@ -35,8 +35,8 @@ import ik_3dof_a0 as ikmod
 # Tunable parameters
 # -------------------------
 STAND_XYZ = (50.0, 120.0, -50.0)   # your current stable stand
-LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z lifts)
-SHIFT_MAG = 0.0                   # magnitude of lateral shift (mm) before lifting
+LIFT_DZ = 60.0                     # lift: z_lift = z_stand + LIFT_DZ (bigger z lifts)
+SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
 # --- Counterweight option #1: diagonal counter in X/Y/Z (local) ---
 COUNTER_DX = 20.0                  # mm, temporary diagonal-leg counter in BODY X (front +)
 COUNTER_DY = 20.0                  # mm, temporary diagonal-leg counter in BODY Y (left +)
@@ -44,9 +44,12 @@ COUNTER_DZ = 20.0                  # mm, temporary counter in Z (local z)
 # --- Counterweight option #2: also apply to 2nd support leg (opposite side) ---
 COUNTER2_ENABLE = True             # also counter on a 2nd support leg (opposite side)
 COUNTER2_SCALE = 0.6               # scale for the 2nd leg counter (0..1)
+# FB (forward/back) Arduino-like tuning:
+# - Swing leg moves further (reach forward) than the body-move phase.
 STEP_FWD = 30.0                    # mm per step for forward/back command
 STEP_LAT = 30.0                    # mm per step for left/right command
 STEP_YAW = 40.0                    # mm per step for yaw command (as differential dx between sides)
+FB_SWING_SCALE = 2.0               # swing distance multiplier for vx-only gait
 # SWING arc
 SWING_ARC_DZ = 15.0                # extra mm added at mid-swing for a nicer foot arc (set 0 to disable)
 
@@ -281,7 +284,7 @@ class CrawlDriver:
             self.api.set_leg_xyz(leg_id, x, y, z, debug=False)
             return True
         except IKError as e:
-            print(f"[IKError] leg={leg_id} target=({x:.1f},{y:.1f},{z:.1f}) -> {e}")
+            print(f"[IKError] leg={leg_id} target=({x:.1f},{y:.1f},{z:.1f}) -> {e}", flush=True)
             return False
 
     def set_pose(self, leg_id: int, x: float, y: float, z: float, duration: float) -> bool:
@@ -375,7 +378,8 @@ class CrawlDriver:
 
         print(
             f"[BODYMOVE] cmd(vx,vy,wz)=({cmd.vx:+d},{cmd.vy:+d},{cmd.wz:+d}) "
-            f"body_dx={body_dx:+.1f} body_dy={body_dy:+.1f} body_dx_yaw={body_dx_yaw:+.1f} T={BODYMOVE_T:.2f}"
+            f"body_dx={body_dx:+.1f} body_dy={body_dy:+.1f} body_dx_yaw={body_dx_yaw:+.1f} T={BODYMOVE_T:.2f}",
+            flush=True,
         )
 
         targets: Dict[int, Tuple[float, float, float]] = {}
@@ -409,7 +413,7 @@ class CrawlDriver:
 
         return True
 
-    def _single_leg_step_no_push(self, swing_leg: int, cmd: Cmd) -> bool:
+    def _single_leg_step_no_push(self, swing_leg: int, cmd: Cmd, *, swing_scale: float = 1.0, support_move: bool = True) -> bool:
         """One single-leg step WITHOUT the PUSH phase.
 
         This performs: SHIFT -> COUNTER -> LIFT -> SWING -> TOUCHDOWN -> UNSHIFT.
@@ -437,7 +441,7 @@ class CrawlDriver:
         z_lift = sz + LIFT_DZ
 
         # BODY command deltas
-        body_dx = cmd.vx * STEP_FWD
+        body_dx = cmd.vx * STEP_FWD * swing_scale
         body_dy = cmd.vy * STEP_LAT
         body_dx_yaw = cmd.wz * STEP_YAW
 
@@ -447,7 +451,7 @@ class CrawlDriver:
         dy_leg = body_y_to_local_y(swing_leg, body_dy)
 
         support = [i for i in (0, 1, 2, 3) if i != swing_leg]
-        body_dy_support = (-body_dy / len(support)) if support else 0.0
+        body_dy_support = (-body_dy / len(support)) if (support and support_move) else 0.0
 
         # 1) SHIFT away from swing leg
         desired_body_shift = +SHIFT_MAG if swing_leg in RIGHT_LEGS else -SHIFT_MAG
@@ -472,14 +476,15 @@ class CrawlDriver:
         swing_target = (x0 + dx_leg, y0 + dy_leg, z_lift)
 
         support_targets = {}
-        for leg_id in support:
-            xs, ys, zs = self.foot[leg_id]
+        if support_move:
+            for leg_id in support:
+                xs, ys, zs = self.foot[leg_id]
 
-            body_dx_support = -(body_dx + body_dx_yaw * side_sign(leg_id)) / len(support)
-            sup_dx_local = body_x_to_local_x(leg_id, body_dx_support)
-            sup_dy_local = body_y_to_local_y(leg_id, body_dy_support)
+                body_dx_support = -(body_dx + body_dx_yaw * side_sign(leg_id)) / len(support)
+                sup_dx_local = body_x_to_local_x(leg_id, body_dx_support)
+                sup_dy_local = body_y_to_local_y(leg_id, body_dy_support)
 
-            support_targets[leg_id] = (xs + sup_dx_local, ys + sup_dy_local, zs)
+                support_targets[leg_id] = (xs + sup_dx_local, ys + sup_dy_local, zs)
 
         steps = max(1, int(PHASE_T / MOVE_DT))
         swing_start = self.foot[swing_leg]
@@ -500,20 +505,22 @@ class CrawlDriver:
             if not self._try_set_leg_xyz(swing_leg, xi, yi, zi):
                 return False
 
-            for leg_id in support:
-                xA0, yA0, zA0 = support_start[leg_id]
-                xAt, yAt, zAt = support_targets[leg_id]
-                xj = lerp(xA0, xAt, ue)
-                yj = lerp(yA0, yAt, ue)
-                zj = lerp(zA0, zAt, ue)
-                if not self._try_set_leg_xyz(leg_id, xj, yj, zj):
-                    return False
+            if support_move:
+                for leg_id in support:
+                    xA0, yA0, zA0 = support_start[leg_id]
+                    xAt, yAt, zAt = support_targets[leg_id]
+                    xj = lerp(xA0, xAt, ue)
+                    yj = lerp(yA0, yAt, ue)
+                    zj = lerp(zA0, zAt, ue)
+                    if not self._try_set_leg_xyz(leg_id, xj, yj, zj):
+                        return False
 
             time.sleep(MOVE_DT)
 
         self.foot[swing_leg] = swing_target
-        for leg_id in support:
-            self.foot[leg_id] = support_targets[leg_id]
+        if support_move:
+            for leg_id in support:
+                self.foot[leg_id] = support_targets[leg_id]
 
         # 4) TOUCHDOWN
         x1, y1, _ = self.foot[swing_leg]
@@ -569,7 +576,7 @@ class CrawlDriver:
         self.fb_idx += 1
 
         if item == -1:
-            print(f"[FB] step={self.fb_idx:04d} phase=BODYMOVE")
+            print(f"[FB] step={self.fb_idx:04d} phase=BODYMOVE", flush=True)
             ok = self._push_all(cmd)
             if not ok:
                 self.go_stand(duration=0.3)
@@ -577,7 +584,7 @@ class CrawlDriver:
 
         # Log swing target and IK (best effort) BEFORE executing
         x0, y0, z0 = self.foot[item]
-        body_dx = cmd.vx * STEP_FWD
+        body_dx = cmd.vx * STEP_FWD * FB_SWING_SCALE
         body_dx_yaw = cmd.wz * STEP_YAW
         body_dy = cmd.vy * STEP_LAT
         body_dx_swing = body_dx + body_dx_yaw * side_sign(item)
@@ -591,7 +598,8 @@ class CrawlDriver:
             print(
                 f"[FB] step={self.fb_idx:04d} leg={item} (BL/FL/BR/FR)="
                 f"{['FR','BR','BL','FL'][item]} "
-                f"swing_tgt=({swing_tgt[0]:+.1f},{swing_tgt[1]:+.1f},{swing_tgt[2]:+.1f}) a0/a1/a2=(n/a)"
+                f"swing_tgt=({swing_tgt[0]:+.1f},{swing_tgt[1]:+.1f},{swing_tgt[2]:+.1f}) a0/a1/a2=(n/a)",
+                flush=True,
             )
         else:
             a0d, a1d, a2d = ang
@@ -599,10 +607,11 @@ class CrawlDriver:
                 f"[FB] step={self.fb_idx:04d} leg={item} (BL/FL/BR/FR)="
                 f"{['FR','BR','BL','FL'][item]} "
                 f"swing_tgt=({swing_tgt[0]:+.1f},{swing_tgt[1]:+.1f},{swing_tgt[2]:+.1f}) "
-                f"a0={a0d:+.2f} a1={a1d:+.2f} a2={a2d:+.2f}"
+                f"a0={a0d:+.2f} a1={a1d:+.2f} a2={a2d:+.2f}",
+                flush=True,
             )
 
-        ok = self._single_leg_step_no_push(item, cmd)
+        ok = self._single_leg_step_no_push(item, cmd, swing_scale=FB_SWING_SCALE, support_move=False)
         if not ok:
             self.go_stand(duration=0.3)
             return
@@ -610,8 +619,12 @@ class CrawlDriver:
     def crawl_step(self, cmd: Cmd):
         """Execute one crawl step using current cmd."""
         if cmd.vx == 0 and cmd.vy == 0 and cmd.wz == 0:
-            # no movement requested
-            self.go_stand(duration=0.25)
+            # no movement requested: keep current XY (Arduino keeps state), only settle Z to stand Z.
+            sx, sy, sz = self.stand
+            for leg_id in (0, 1, 2, 3):
+                x, y, _ = self.foot[leg_id]
+                # quick settle to ground Z
+                _ = self.set_pose(leg_id, x, y, sz, duration=0.15)
             return
 
         # Forward/back special: Arduino-like sequence using side pairs (rear->front) with PUSH phases.
