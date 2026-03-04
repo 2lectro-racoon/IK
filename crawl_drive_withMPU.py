@@ -79,9 +79,19 @@ IMU_STANCE_ASSIST_MAX_DZ = 8.0     # mm clamp during stance assist (start small)
 #   - roll  (right-down positive):  accel ax+, gyro gy+
 #   - pitch (front-down positive):  accel ay+, gyro gx+
 # -------------------------
+# IMU filtering (MPU6050) - complementary filter
+# Units (confirmed): accel m/s^2, gyro rad/s
+# Axis mapping (confirmed by your tests):
+#   - roll  (right-down positive):  accel ax+, gyro gy+
+#   - pitch (front-down positive):  accel ay+, gyro gx+
 IMU_ALPHA = 0.99          # higher -> trust gyro more (less accel noise)
 IMU_CALIB_SEC = 2.0       # seconds of gyro bias averaging at startup
 IMU_PRINT_HZ = 5.0        # how often to print roll/pitch (Hz)
+
+# ---- IMU acceleration-magnitude gating for complementary filter ----
+IMU_USE_ACCEL_GATING = True
+IMU_G_MIN = 8.5           # m/s^2, lower bound to consider accel tilt reliable
+IMU_G_MAX = 11.5          # m/s^2, upper bound to consider accel tilt reliable
 # STEP_FWD = 25.0                    # mm per step for forward/back command
 # STEP_LAT = 20.0                    # mm per step for left/right command
 # STEP_YAW = 20.0                    # mm per step for yaw command (as differential dx between sides)
@@ -230,12 +240,24 @@ class IMUComplementary:
         pitch_gyro = self.pitch + gx * dt
 
         # Accel tilt (valid when linear accel is small)
-        roll_acc = math.atan2(ax, az)
-        pitch_acc = math.atan2(ay, az)
+        # During gait, |a| can deviate from g due to impacts/linear acceleration.
+        # Gate accel correction to avoid corrupting roll/pitch.
+        use_accel = True
+        if IMU_USE_ACCEL_GATING:
+            amag = math.sqrt(ax * ax + ay * ay + az * az)
+            use_accel = (IMU_G_MIN <= amag <= IMU_G_MAX)
 
-        a = self.alpha
-        self.roll = a * roll_gyro + (1.0 - a) * roll_acc
-        self.pitch = a * pitch_gyro + (1.0 - a) * pitch_acc
+        if use_accel:
+            roll_acc = math.atan2(ax, az)
+            pitch_acc = math.atan2(ay, az)
+            a = self.alpha
+            self.roll = a * roll_gyro + (1.0 - a) * roll_acc
+            self.pitch = a * pitch_gyro + (1.0 - a) * pitch_acc
+        else:
+            # Gyro-only update for this tick
+            self.roll = roll_gyro
+            self.pitch = pitch_gyro
+
         return self.roll, self.pitch
 
     def update_from_mpu(self) -> tuple[float, float]:
