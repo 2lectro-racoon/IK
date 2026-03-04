@@ -283,10 +283,16 @@ class CrawlDriver:
 
         # Temporary diagonal-leg counter: push the diagonal support foot radially outward
         # in BODY frame (front legs get +X, back legs get -X; left legs get +Y, right legs get -Y).
-        body_dx_ctr = +COUNTER_DX if diag_leg in FRONT_LEGS else +COUNTER_DX
-        body_dy_ctr = +COUNTER_DY if diag_leg in LEFT_LEGS else +COUNTER_DY
+        body_dx_ctr = +COUNTER_DX if diag_leg in FRONT_LEGS else -COUNTER_DX
+        body_dy_ctr = +COUNTER_DY if diag_leg in LEFT_LEGS else -COUNTER_DY
         dx_ctr_local = body_x_to_local_x(diag_leg, body_dx_ctr)
         dy_ctr_local = body_y_to_local_y(diag_leg, body_dy_ctr)
+        # Debug: diagonal counter applied
+        print(
+            f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} "
+            f"body_ctr=({body_dx_ctr:+.1f},{body_dy_ctr:+.1f}) "
+            f"local_ctr=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f})"
+        )
 
         sx, sy, sz = self.stand
         z_lift = sz + LIFT_DZ  # smaller z lifts
@@ -301,6 +307,11 @@ class CrawlDriver:
         body_dx_swing = body_dx + body_dx_yaw * side_sign(swing_leg)
         dx_leg = body_x_to_local_x(swing_leg, body_dx_swing)
         dy_leg = body_y_to_local_y(swing_leg, body_dy)
+        # Debug: show swing leg command in local frame
+        print(
+            f"[SWING] leg={swing_leg} body_dx={body_dx_swing:+.1f} body_dy={body_dy:+.1f} "
+            f"-> local_dx={dx_leg:+.1f} local_dy={dy_leg:+.1f}"
+        )
 
         # Support legs (stance): distribute opposite motion per leg in BODY frame, then map per leg to LOCAL.
         support = [i for i in (0, 1, 2, 3) if i != swing_leg]
