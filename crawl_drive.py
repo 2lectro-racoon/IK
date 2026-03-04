@@ -575,13 +575,20 @@ class CrawlDriver:
         """Arduino-like forward/back sequence (side pair, rear->front, then body-move).
 
         Sequence (repeats):
-          - Forward (vx>0):  BL -> FL -> BODYMOVE -> BR -> FR -> BODYMOVE
-          - Backward(vx<0):  BR -> FR -> BODYMOVE -> BL -> FL -> BODYMOVE
+          - w / forward (vx>0):  BR -> FR -> BODYMOVE -> BL -> FL -> BODYMOVE
+          - s / backward(vx<0):  FR -> BR -> BODYMOVE -> FL -> BL -> BODYMOVE
         """
-        if cmd.vx >= 0:
-            seq = [2, 3, -1, 1, 0, -1]  # forward
+        # NOTE: For your robot's current mapping, the visually-correct FB crawl order is:
+        #   w (vx>0):  BR -> FR -> BODYMOVE -> BL -> FL -> BODYMOVE
+        #   s (vx<0):  FR -> BR -> BODYMOVE -> FL -> BL -> BODYMOVE
+        if cmd.vx > 0:
+            seq = [1, 0, -1, 2, 3, -1]  # w / forward
+            seq_name = "W/FWD"
         else:
-            seq = [1, 0, -1, 2, 3, -1]  # backward
+            seq = [0, 1, -1, 3, 2, -1]  # s / backward
+            seq_name = "S/BACK"
+
+        print(f"[FB] select seq={seq_name} cmd.vx={cmd.vx:+d} -> {seq}", flush=True)
         item = seq[self.fb_idx % len(seq)]
         self.fb_idx += 1
 
