@@ -37,8 +37,10 @@ import ik_3dof_a0 as ikmod
 STAND_XYZ = (120.0, 70.0, -50.0)   # your current stable stand
 LIFT_DZ = 60.0                     # lift: z_lift = z_stand - LIFT_DZ (smaller z lifts)
 SHIFT_MAG = 20.0                   # magnitude of lateral shift (mm) before lifting
+# --- Counterweight option #1: diagonal counter in X/Y/Z (local) ---
 COUNTER_DX = 20.0                  # mm, temporary diagonal-leg counter in BODY X (front +)
 COUNTER_DY = 20.0                  # mm, temporary diagonal-leg counter in BODY Y (left +)
+COUNTER_DZ = 20.0                  # mm, temporary counter in Z (local z)
 # --- Counterweight option #2: also apply to 2nd support leg (opposite side) ---
 COUNTER2_ENABLE = True             # also counter on a 2nd support leg (opposite side)
 COUNTER2_SCALE = 0.6               # scale for the 2nd leg counter (0..1)
@@ -354,24 +356,27 @@ class CrawlDriver:
             cand = [lid for lid in opp_side if lid != diag_leg]
             ctr2_leg = cand[0] if cand else None
 
-        # Temporary counter: push support feet OUTWARD in each leg's *local* XY.
+        # Temporary counter: push support feet OUTWARD in each leg's *local* XYZ.
         # Your local convention (per leg): (+x, +y) extends the leg outward (away from body).
         dx_ctr_local = +COUNTER_DX
         dy_ctr_local = +COUNTER_DY
+        dz_ctr_local = +COUNTER_DZ
 
         dx_ctr2_local = dx_ctr_local * COUNTER2_SCALE if ctr2_leg is not None else 0.0
         dy_ctr2_local = dy_ctr_local * COUNTER2_SCALE if ctr2_leg is not None else 0.0
+        dz_ctr2_local = dz_ctr_local * COUNTER2_SCALE if ctr2_leg is not None else 0.0
 
         # Debug: counter applied (LOCAL frame)
         if ctr2_leg is None:
             print(
                 f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} "
-                f"local_ctr=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f})"
+                f"local_ctr=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f},{dz_ctr_local:+.1f})"
             )
         else:
             print(
                 f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} ctr2_leg={ctr2_leg} "
-                f"diag=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f}) ctr2=({dx_ctr2_local:+.1f},{dy_ctr2_local:+.1f})"
+                f"diag=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f},{dz_ctr_local:+.1f}) "
+                f"ctr2=({dx_ctr2_local:+.1f},{dy_ctr2_local:+.1f},{dz_ctr2_local:+.1f})"
             )
 
         sx, sy, sz = self.stand
@@ -407,13 +412,13 @@ class CrawlDriver:
 
         # 1b) TEMP COUNTER: move diagonal (and optional 2nd) support foot outward (XY)
         xd, yd, zd = self.foot[diag_leg]
-        if not self.set_pose(diag_leg, xd + dx_ctr_local, yd + dy_ctr_local, zd, PHASE_T):
+        if not self.set_pose(diag_leg, xd + dx_ctr_local, yd + dy_ctr_local, zd + dz_ctr_local, PHASE_T):
             self.go_stand(duration=0.3)
             return
 
         if ctr2_leg is not None:
             x2, y2, z2 = self.foot[ctr2_leg]
-            if not self.set_pose(ctr2_leg, x2 + dx_ctr2_local, y2 + dy_ctr2_local, z2, PHASE_T):
+            if not self.set_pose(ctr2_leg, x2 + dx_ctr2_local, y2 + dy_ctr2_local, z2 + dz_ctr2_local, PHASE_T):
                 self.go_stand(duration=0.3)
                 return
 
