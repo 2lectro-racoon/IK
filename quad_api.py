@@ -65,7 +65,7 @@ class QuadLegAPI:
         if quiet_werkzeug:
             logging.getLogger("werkzeug").setLevel(logging.ERROR)
         if enable_flask_stream:
-            afb.flask.startServer()
+            afb2.flask.startServer()
 
     # ----- calibration compatible helper -----
     def apply_one_debug(self, ch: int, delta_deg: float) -> Tuple[int, float, bool]:
@@ -149,7 +149,7 @@ class QuadLegAPI:
             )
             print(f"[LEG] {leg_name} (leg_id={leg_id}, leg_idx={leg_idx}) -> channels {ch0},{ch1},{ch2}")
 
-        afb.quad.leg(leg_idx, out0, out1, out2)
+        afb2.quad.leg(leg_idx, out0, out1, out2)
         return out0, out1, out2
 
     def set_all_legs_xyz(self, x: float, y: float, z: float, *, debug: bool = False) -> None:
@@ -174,12 +174,12 @@ class QuadLegAPI:
 
             if debug:
                 print(f"[CENTER] {leg_name} -> ch{ch0}={center0}, ch{ch1}={center1}, ch{ch2}={center2}")
-            afb.quad.leg(leg_idx, center0, center1, center2)
+            afb2.quad.leg(leg_idx, center0, center1, center2)
 
         if debug:
             print("[INFO] Done.\n")
     def leg_reset(self) -> None:
-        afb.gpio.reset()
+        afb2.gpio.reset()
 
 
 # -----------------------------
