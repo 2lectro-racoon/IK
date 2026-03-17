@@ -23,7 +23,7 @@ import math
 import select
 import termios
 import tty
-import afb
+import afb2
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
@@ -207,7 +207,7 @@ class IMUComplementary:
         dt = 1.0 / sample_hz
         sx = sy = sz = 0.0
         for _ in range(n):
-            ax, ay, az, gx, gy, gz = afb.sensor.mpu()
+            ax, ay, az, gx, gy, gz = afb2.sensor.mpu()
             sx += gx
             sy += gy
             sz += gz
@@ -216,7 +216,7 @@ class IMUComplementary:
         self.gy_bias = sy / n
         self.gz_bias = sz / n
         # Initialize roll/pitch from accel once after calibration
-        ax, ay, az, gx, gy, gz = afb.sensor.mpu()
+        ax, ay, az, gx, gy, gz = afb2.sensor.mpu()
         self.roll = math.atan2(ax, az)
         self.pitch = math.atan2(ay, az)
         self._t_prev = time.time()
@@ -268,7 +268,7 @@ class IMUComplementary:
         return self.roll, self.pitch
 
     def update_from_mpu(self) -> tuple[float, float]:
-        ax, ay, az, gx, gy, gz = afb.sensor.mpu()
+        ax, ay, az, gx, gy, gz = afb2.sensor.mpu()
         return self.update(ax, ay, az, gx, gy, gz)
 
 
@@ -910,7 +910,7 @@ def main():
     s_pitch = 0.0
     n0 = 0
     while (time.time() - t0) < IMU_ZERO_SEC:
-        ax, ay, az, gx, gy, gz = afb.sensor.mpu()
+        ax, ay, az, gx, gy, gz = afb2.sensor.mpu()
         r, p = imu.update(ax, ay, az, gx, gy, gz, now=time.time())
         s_roll += rad2deg(r)
         s_pitch += rad2deg(p)
@@ -935,7 +935,7 @@ def main():
                 now = time.time()
 
                 # Read MPU once per loop, use the same sample for filter + debug
-                ax, ay, az, gx, gy, gz = afb.sensor.mpu()
+                ax, ay, az, gx, gy, gz = afb2.sensor.mpu()
                 roll, pitch = imu.update(ax, ay, az, gx, gy, gz, now=now)
                 IMU_LATEST_ROLL_DEG = rad2deg(roll)
                 IMU_LATEST_PITCH_DEG = rad2deg(pitch)

@@ -1,7 +1,7 @@
 # test_fr_ik2.py
 from ik_3dof_a0 import LegGeometry, ik_leg_a0_xyz, fk_leg_a0
 from calib import load_calibration, clamp
-import afb
+import afb2
 import logging
 import os
 
@@ -9,7 +9,7 @@ print(f"[RUNNING] {__file__}")
 print(f"[CWD] {os.getcwd()}")
 
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
-afb.flask.startServer()
+afb2.flask.startServer()
 
 # ---- geometry (EDIT HERE) ----
 A_LEN = 48
@@ -80,7 +80,7 @@ try:
                 center2 = int(round(calib.center_deg[ch2]))
 
                 print(f"[CENTER] {leg_name} -> ch{ch0}={center0}, ch{ch1}={center1}, ch{ch2}={center2}")
-                afb.quad.leg(leg_idx, center0, center1, center2)
+                afb2.quad.leg(leg_idx, center0, center1, center2)
 
             print("[INFO] Done. Exiting.\n")
             break
@@ -134,7 +134,7 @@ try:
         )
 
         print(f"[LEG] {leg_name} (leg_id={leg_id}, leg_idx={leg_idx}) -> channels {ch0},{ch1},{ch2}")
-        afb.quad.leg(leg_idx, out0, out1, out2)
+        afb2.quad.leg(leg_idx, out0, out1, out2)
 
 except KeyboardInterrupt:
     print("\n[CTRL+C] KeyboardInterrupt detected.")
@@ -152,6 +152,6 @@ finally:
         center2 = int(round(calib.center_deg[ch2]))
 
         print(f"[CENTER] {leg_name} -> ch{ch0}={center0}, ch{ch1}={center1}, ch{ch2}={center2}")
-        afb.quad.leg(leg_idx, center0, center1, center2)
+        afb2.quad.leg(leg_idx, center0, center1, center2)
 
     print("[INFO] Exit complete.\n")

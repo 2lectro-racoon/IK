@@ -4,7 +4,7 @@ import time
 
 # 너 프로젝트에 맞게 import 경로만 맞춰줘
 # 예) from afb2 import quad
-import afb  # 같은 폴더에 quad.py가 있다면 OK
+import afb2  # 같은 폴더에 quad.py가 있다면 OK
 import logging
 
 from calib import load_calibration, save_calibration, Calibration
@@ -14,12 +14,12 @@ def send_neutral(neutral: List[float], calib: Calibration) -> None:
     """Send calibrated neutral pose by quad.servo()."""
     for ch, a in enumerate(neutral):
         out = calib.apply_one(ch, a)
-        afb.quad.servo(ch, out)
+        afb2.quad.servo(ch, out)
 
 
 def main():
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
-    afb.flask.startServer()
+    afb2.flask.startServer()
     path = "calib_quad.json"
     calib = load_calibration(path)
 
