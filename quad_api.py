@@ -10,7 +10,7 @@ from typing import Dict, Tuple
 from ik_3dof_a0 import LegGeometry, ik_leg_a0_xyz, fk_leg_a0
 from calib import load_calibration, clamp, Calibration
 
-import afb
+import afb2
 import logging
 import os
 
