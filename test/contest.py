@@ -149,22 +149,17 @@ class ContestMission:
         # A_crawl_drive.py와 같은 초기화 흐름을 사용한다.
         self.driver.reset()
 
-        print("[INFO] Stand pose:", STAND_XYZ)
-        self.driver.go_stand(duration=0.6)
-
-        print("[INFO] Contest mission start")
-        print("[INFO] 기본 동작: 직진")
-        print("[INFO] ID 1=좌회전 90도 / ID 2=우회전 90도")
-        print(f"[INFO] TRIGGER_AREA={TRIGGER_AREA} 이상이면 반응")
+        print("ready", flush=True)
 
     def stop(self):
         self.driver.shutdown()
 
     def forward_step(self):
+        print("go", flush=True)
         self.driver.crawl_step(CMD_FORWARD)
 
     def turn_left_90(self):
-        print(f"[TURN] LEFT 90deg steps={TURN_90_STEPS}", flush=True)
+        print("left", flush=True)
         self.driver.go_stand(duration=0.25)
 
         for _ in range(TURN_90_STEPS):
@@ -173,7 +168,7 @@ class ContestMission:
         self.driver.go_stand(duration=0.25)
 
     def turn_right_90(self):
-        print(f"[TURN] RIGHT 90deg steps={TURN_90_STEPS}", flush=True)
+        print("right", flush=True)
         self.driver.go_stand(duration=0.25)
 
         for _ in range(TURN_90_STEPS):
@@ -182,12 +177,6 @@ class ContestMission:
         self.driver.go_stand(duration=0.25)
 
     def handle_marker(self, marker: MarkerInfo):
-        print(
-            f"[MARKER] ID={marker.marker_id} "
-            f"X={marker.cx} Y={marker.cy} AREA={int(marker.area)}",
-            flush=True,
-        )
-
         if marker.marker_id == 1:
             self.turn_left_90()
         elif marker.marker_id == 2:
