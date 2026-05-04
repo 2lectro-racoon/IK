@@ -177,6 +177,7 @@ class ContestMission:
         self.driver.go_stand(duration=0.25)
 
     def handle_marker(self, marker: MarkerInfo):
+        print(f"marker id={marker.marker_id} area={int(marker.area)}", flush=True)
         if marker.marker_id == 1:
             self.turn_left_90()
         elif marker.marker_id == 2:
