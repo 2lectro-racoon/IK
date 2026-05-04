@@ -569,11 +569,11 @@ class CrawlDriver:
         body_dy = -(cmd.vy * STEP_LAT * BODYMOVE_LAT)
         body_dx_yaw = -(cmd.wz * STEP_YAW * BODYMOVE_YAW)
 
-        print(
-            f"[BODYMOVE] cmd(vx,vy,wz)=({cmd.vx:+d},{cmd.vy:+d},{cmd.wz:+d}) "
-            f"body_dx={body_dx:+.1f} body_dy={body_dy:+.1f} body_dx_yaw={body_dx_yaw:+.1f} T={BODYMOVE_T:.2f}",
-            flush=True,
-        )
+        # print(
+        #     f"[BODYMOVE] cmd(vx,vy,wz)=({cmd.vx:+d},{cmd.vy:+d},{cmd.wz:+d}) "
+        #     f"body_dx={body_dx:+.1f} body_dy={body_dy:+.1f} body_dx_yaw={body_dx_yaw:+.1f} T={BODYMOVE_T:.2f}",
+        #     flush=True,
+        # )
 
         targets: Dict[int, Tuple[float, float, float]] = {}
 
@@ -598,7 +598,7 @@ class CrawlDriver:
             targets[leg_id] = (xt, yt, sz)
 
         if RECENTER_ENABLE:
-            print(f"[RECENTER] enabled k={RECENTER_K:.3f} (targets pulled toward HOME)", flush=True)
+            # print(f"[RECENTER] enabled k={RECENTER_K:.3f} (targets pulled toward HOME)", flush=True)
 
         steps = max(1, int(BODYMOVE_T / MOVE_DT))
         start = {i: self.foot[i] for i in (0, 1, 2, 3)}
@@ -830,14 +830,14 @@ class CrawlDriver:
             seq = [0, 1, -1, 3, 2, -1]
             seq_name = "S/BACK"
 
-        print(f"[FB] select seq={seq_name} cmd.vx={cmd.vx:+d} -> {seq}", flush=True)
+        # print(f"[FB] select seq={seq_name} cmd.vx={cmd.vx:+d} -> {seq}", flush=True)
 
         item = seq[self.fb_idx % len(seq)]
         self.fb_idx += 1
 
         # -1은 BODYMOVE 단계 의미
         if item == -1:
-            print(f"[FB] step={self.fb_idx:04d} phase=BODYMOVE", flush=True)
+            # print(f"[FB] step={self.fb_idx:04d} phase=BODYMOVE", flush=True)
             ok = self._push_all(cmd)
             if not ok:
                 self.go_stand(duration=0.3)
@@ -859,21 +859,23 @@ class CrawlDriver:
 
         ang = _try_ik_angles_deg(*swing_tgt)
         if ang is None:
-            print(
-                f"[FB] step={self.fb_idx:04d} leg={item} (BL/FL/BR/FR)="
-                f"{['FR','BR','BL','FL'][item]} "
-                f"swing_tgt=({swing_tgt[0]:+.1f},{swing_tgt[1]:+.1f},{swing_tgt[2]:+.1f}) a0/a1/a2=(n/a)",
-                flush=True,
-            )
+            # print(
+            #     f"[FB] step={self.fb_idx:04d} leg={item} (BL/FL/BR/FR)="
+            #     f"{['FR','BR','BL','FL'][item]} "
+            #     f"swing_tgt=({swing_tgt[0]:+.1f},{swing_tgt[1]:+.1f},{swing_tgt[2]:+.1f}) a0/a1/a2=(n/a)",
+            #     flush=True,
+            # )
+            pass
         else:
             a0d, a1d, a2d = ang
-            print(
-                f"[FB] step={self.fb_idx:04d} leg={item} (BL/FL/BR/FR)="
-                f"{['FR','BR','BL','FL'][item]} "
-                f"swing_tgt=({swing_tgt[0]:+.1f},{swing_tgt[1]:+.1f},{swing_tgt[2]:+.1f}) "
-                f"a0={a0d:+.2f} a1={a1d:+.2f} a2={a2d:+.2f}",
-                flush=True,
-            )
+            # print(
+            #     f"[FB] step={self.fb_idx:04d} leg={item} (BL/FL/BR/FR)="
+            #     f"{['FR','BR','BL','FL'][item]} "
+            #     f"swing_tgt=({swing_tgt[0]:+.1f},{swing_tgt[1]:+.1f},{swing_tgt[2]:+.1f}) "
+            #     f"a0={a0d:+.2f} a1={a1d:+.2f} a2={a2d:+.2f}",
+            #     flush=True,
+            # )
+            pass
 
         ok = self._single_leg_step_no_push(item, cmd, swing_scale=FB_SWING_SCALE, support_move=False)
         if not ok:
@@ -907,7 +909,7 @@ class CrawlDriver:
                 self.order_idx = 0
                 self._crawl_order_key = "fwd" if fb_dir > 0 else "back"
 
-                print(f"[FB] direction change -> {'FWD' if fb_dir > 0 else 'BACK'} : reset idx + go_stand", flush=True)
+            # print(f"[FB] direction change -> {'FWD' if fb_dir > 0 else 'BACK'} : reset idx + go_stand", flush=True)
 
             self.fb_step(cmd)
             return
@@ -944,16 +946,18 @@ class CrawlDriver:
         dz_ctr2_local = dz_ctr_local * COUNTER2_SCALE if ctr2_leg is not None else 0.0
 
         if ctr2_leg is None:
-            print(
-                f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} "
-                f"local_ctr=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f},{dz_ctr_local:+.1f})"
-            )
+            # print(
+            #     f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} "
+            #     f"local_ctr=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f},{dz_ctr_local:+.1f})"
+            # )
+            pass
         else:
-            print(
-                f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} ctr2_leg={ctr2_leg} "
-                f"diag=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f},{dz_ctr_local:+.1f}) "
-                f"ctr2=({dx_ctr2_local:+.1f},{dy_ctr2_local:+.1f},{dz_ctr2_local:+.1f})"
-            )
+            # print(
+            #     f"[COUNTER] swing_leg={swing_leg} diag_leg={diag_leg} ctr2_leg={ctr2_leg} "
+            #     f"diag=({dx_ctr_local:+.1f},{dy_ctr_local:+.1f},{dz_ctr_local:+.1f}) "
+            #     f"ctr2=({dx_ctr2_local:+.1f},{dy_ctr2_local:+.1f},{dz_ctr2_local:+.1f})"
+            # )
+            pass
 
         sx, sy, sz = self.stand
         z_lift = sz + LIFT_DZ
@@ -968,10 +972,10 @@ class CrawlDriver:
         dx_leg = body_x_to_local_x(swing_leg, body_dx_swing)
         dy_leg = body_y_to_local_y(swing_leg, body_dy)
 
-        print(
-            f"[SWING] leg={swing_leg} body_dx={body_dx_swing:+.1f} body_dy={body_dy:+.1f} "
-            f"-> local_dx={dx_leg:+.1f} local_dy={dy_leg:+.1f}"
-        )
+        # print(
+        #     f"[SWING] leg={swing_leg} body_dx={body_dx_swing:+.1f} body_dy={body_dy:+.1f} "
+        #     f"-> local_dx={dx_leg:+.1f} local_dy={dy_leg:+.1f}"
+        # )
 
         support = [i for i in (0, 1, 2, 3) if i != swing_leg]
         body_dy_support = -body_dy / len(support) if support else 0.0
@@ -1004,13 +1008,15 @@ class CrawlDriver:
         xt, yt, zt = swing_target
         ang = _try_ik_angles_deg(xt, yt, zt)
         if ang is None:
-            print(f"[SWING_TGT] leg={swing_leg} xyz=({xt:+.1f},{yt:+.1f},{zt:+.1f}) a0/a1/a2=(n/a)")
+            # print(f"[SWING_TGT] leg={swing_leg} xyz=({xt:+.1f},{yt:+.1f},{zt:+.1f}) a0/a1/a2=(n/a)")
+            pass
         else:
             a0d, a1d, a2d = ang
-            print(
-                f"[SWING_TGT] leg={swing_leg} xyz=({xt:+.1f},{yt:+.1f},{zt:+.1f}) "
-                f"a0={a0d:+.2f} a1={a1d:+.2f} a2={a2d:+.2f}"
-            )
+            # print(
+            #     f"[SWING_TGT] leg={swing_leg} xyz=({xt:+.1f},{yt:+.1f},{zt:+.1f}) "
+            #     f"a0={a0d:+.2f} a1={a1d:+.2f} a2={a2d:+.2f}"
+            # )
+            pass
 
         support_targets = {}
         for leg_id in support:
@@ -1152,11 +1158,11 @@ class CrawlDriver:
         self._fb_dir = 0
         self._crawl_order_key = "fwd"
 
-        print(
-            f"[RESET] cmd change {prev.vx:+d},{prev.vy:+d},{prev.wz:+d} -> "
-            f"{cmd.vx:+d},{cmd.vy:+d},{cmd.wz:+d} : go_stand + reset idx",
-            flush=True,
-        )
+        # print(
+        #     f"[RESET] cmd change {prev.vx:+d},{prev.vy:+d},{prev.wz:+d} -> "
+        #     f"{cmd.vx:+d},{cmd.vy:+d},{cmd.wz:+d} : go_stand + reset idx",
+        #     flush=True,
+        # )
         self.go_stand(duration=0.25)
 
 
