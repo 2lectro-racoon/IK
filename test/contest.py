@@ -44,7 +44,7 @@ CENTER_X_RATIO = 0.35
 
 # AR마커 화면 면적 기준.
 # 마커가 가까울수록 화면에서 크게 보이므로 area 값이 커진다.
-TRIGGER_AREA = 1800
+TRIGGER_AREA = 1500
 
 # 같은 마커에 너무 자주 반응하지 않도록 하는 시간
 MARKER_COOLDOWN_SEC = 2.0
@@ -180,8 +180,10 @@ class ContestMission:
     def handle_marker(self, marker: MarkerInfo):
         print(f"marker id={marker.marker_id} area={int(marker.area)}", flush=True)
         if marker.marker_id == 1:
+            time.sleep(2)
             self.turn_left_90()
         elif marker.marker_id == 2:
+            time.sleep(2)
             self.turn_right_90()
         else:
             print(f"[MARKER] ID={marker.marker_id}는 미션 대상이 아니므로 무시", flush=True)
