@@ -9,6 +9,7 @@ from A_calib import load_calibration, clamp, Calibration
 import afb2
 import logging
 import os
+from pathlib import Path
 
 
 # -----------------------------
@@ -166,10 +167,12 @@ Z_OFF = 0
 DZ_A0_A1 = 25.0
 
 GEO_DEFAULT = LegGeometry(A=A_LEN, B=B_LEN, C=C_LEN, Z_OFF=Z_OFF, DZ_A0_A1=DZ_A0_A1)
-CALIB_DEFAULT = load_calibration("calib_quad.json")
+CALIB_PATH = Path(__file__).resolve().with_name("calib_quad.json")
+CALIB_DEFAULT = load_calibration(str(CALIB_PATH))
 
 
 def make_default_api():
+    print(f"[CALIB] using {CALIB_PATH}")
     return QuadLegAPI(geo=GEO_DEFAULT, calib=CALIB_DEFAULT)
 
 
