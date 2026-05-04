@@ -200,8 +200,20 @@ class ContestQuadDriver:
         self.turn_idx = 0
 
     def reset(self):
+        # 하드웨어 초기화
         self.api.leg_reset()
-        time.sleep(15)
+        time.sleep(8)
+
+        # 안전하게 센터 포즈로 먼저 이동 (기구적 안정화)
+        self.api.go_center_pose(debug=False)
+        time.sleep(1.0)
+
+        # 내부 foot 상태를 실제 자세와 동기화
+        sx, sy, sz = self.stand
+        for leg_id in (0, 1, 2, 3):
+            self.foot[leg_id] = (sx, sy, sz)
+
+        print("[RESET] synced to stand pose", flush=True)
 
     def shutdown(self):
         self.api.go_center_pose(debug=True)
