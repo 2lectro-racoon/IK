@@ -122,6 +122,7 @@ class ArMarkerDetector:
                 (255, 0, 0),
                 2,
             )
+            print(f"marker id={marker_id} area={int(area)}", flush=True)
 
             # 화면 중앙 근처에 있는 마커만 정면 마커로 사용
             if abs(cx - image_cx) > center_limit:
