@@ -599,6 +599,7 @@ class CrawlDriver:
 
         if RECENTER_ENABLE:
             # print(f"[RECENTER] enabled k={RECENTER_K:.3f} (targets pulled toward HOME)", flush=True)
+            pass
 
         steps = max(1, int(BODYMOVE_T / MOVE_DT))
         start = {i: self.foot[i] for i in (0, 1, 2, 3)}
