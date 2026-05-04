@@ -44,7 +44,7 @@ CENTER_X_RATIO = 0.35
 
 # AR마커 화면 면적 기준.
 # 마커가 가까울수록 화면에서 크게 보이므로 area 값이 커진다.
-TRIGGER_AREA = 8000
+TRIGGER_AREA = 1800
 
 # 같은 마커에 너무 자주 반응하지 않도록 하는 시간
 MARKER_COOLDOWN_SEC = 2.0
