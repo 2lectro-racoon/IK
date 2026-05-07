@@ -62,8 +62,15 @@ TURN_90_STEPS = 24
 # 회전 후 다시 직진을 안정적으로 시작하기 위한 직진 step 수
 FORWARD_AFTER_TURN_STEPS = 2
 
+
 # SPI 전송 안정화용 인터벌
 STEP_INTERVAL = 0.12
+
+# 회전 중에도 SPI 전송이 너무 빠르게 몰리지 않도록 별도 인터벌을 둔다.
+TURN_STEP_INTERVAL = 0.12
+
+# 마커 로그가 카메라 프레임마다 과도하게 출력되지 않도록 제한한다.
+MARKER_PRINT_INTERVAL = 0.25
 
 # 기본 직진 명령
 CMD_FORWARD = Cmd(vx=+1, vy=0, wz=0)
@@ -92,6 +99,7 @@ class ArMarkerDetector:
         aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
         parameters = cv2.aruco.DetectorParameters()
         self.detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
+        self.last_marker_print_t = 0.0
 
     def detect_front_marker(self) -> Tuple[Optional[MarkerInfo], np.ndarray]:
         frame = afb2.camera.get_image()
@@ -125,7 +133,10 @@ class ArMarkerDetector:
                 (255, 0, 0),
                 2,
             )
-            print(f"marker id={marker_id} area={int(area)}", flush=True)
+            now = time.time()
+            if now - self.last_marker_print_t >= MARKER_PRINT_INTERVAL:
+                print(f"marker id={marker_id} area={int(area)}", flush=True)
+                self.last_marker_print_t = now
 
             # 화면 중앙 근처에 있는 마커만 정면 마커로 사용
             if abs(cx - image_cx) > center_limit:
@@ -168,6 +179,7 @@ class ContestMission:
 
         for _ in range(TURN_90_STEPS):
             self.driver.crawl_step(CMD_TURN_LEFT)
+            time.sleep(TURN_STEP_INTERVAL)
 
         self.driver.go_stand(duration=0.25)
 
@@ -177,6 +189,7 @@ class ContestMission:
 
         for _ in range(TURN_90_STEPS):
             self.driver.crawl_step(CMD_TURN_RIGHT)
+            time.sleep(TURN_STEP_INTERVAL)
 
         self.driver.go_stand(duration=0.25)
 
@@ -195,6 +208,7 @@ class ContestMission:
         # 회전 후 직진을 다시 시작
         for _ in range(FORWARD_AFTER_TURN_STEPS):
             self.forward_step()
+            time.sleep(STEP_INTERVAL)
 
     def loop(self):
         last_step_t = 0.0
