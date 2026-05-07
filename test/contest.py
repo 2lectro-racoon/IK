@@ -45,7 +45,11 @@ CENTER_X_RATIO = 0.35
 
 # AR마커 화면 면적 기준.
 # 마커가 가까울수록 화면에서 크게 보이므로 area 값이 커진다.
+
 TRIGGER_AREA = 8000
+
+# ID 3 정지 마커는 별도 거리 기준을 사용한다.
+ID3_TRIGGER_AREA = 10000
 
 # 같은 마커에 너무 자주 반응하지 않도록 하는 시간
 MARKER_COOLDOWN_SEC = 2.0
@@ -209,6 +213,11 @@ class ContestMission:
 
         self.driver.go_stand(duration=0.25)
 
+    def is_marker_triggered(self, marker: MarkerInfo) -> bool:
+        if marker.marker_id == 3:
+            return marker.area > ID3_TRIGGER_AREA
+        return marker.area > TRIGGER_AREA
+
     def handle_marker(self, marker: MarkerInfo):
         print(f"marker id={marker.marker_id} area={int(marker.area)}", flush=True)
 
@@ -249,7 +258,7 @@ class ContestMission:
             now = time.time()
             can_trigger = (now - self.last_trigger_t) > MARKER_COOLDOWN_SEC
 
-            if marker is not None and marker.area > TRIGGER_AREA and can_trigger:
+            if marker is not None and self.is_marker_triggered(marker) and can_trigger:
                 self.last_trigger_t = now
                 self.handle_marker(marker)
 
