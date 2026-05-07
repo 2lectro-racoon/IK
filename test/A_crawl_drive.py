@@ -1135,6 +1135,21 @@ class CrawlDriver:
         종료 시 안전하게 센터 포즈로 이동.
         """
         self.api.go_center_pose(debug=True)
+    
+    def bodyup(self, duration: float = 0.6):
+        """
+        몸을 높이는 자세로 이동.
+        네 다리 모두 같은 로컬 좌표 (100, 100, -100)으로 보낸다.
+        """
+        x, y, z = 100.0, 100.0, -100.0
+        ok = self.set_all(x, y, z, duration)
+
+        if ok:
+            self.stand = (x, y, z)
+            self.home = {i: self.foot[i] for i in (0, 1, 2, 3)}
+
+        return ok
+
 
     def _maybe_reset_on_direction_change(self, cmd: Cmd):
         """
