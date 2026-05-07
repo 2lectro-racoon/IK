@@ -211,15 +211,18 @@ class ContestMission:
 
     def handle_marker(self, marker: MarkerInfo):
         print(f"marker id={marker.marker_id} area={int(marker.area)}", flush=True)
+
+        # ID 3은 최종 정지 마커이므로 회전 처리보다 먼저 판단한다.
+        if marker.marker_id == 3:
+            self.stop_in_place()
+            return
+
         if marker.marker_id == 1:
             time.sleep(2)
             self.turn_left_90()
         elif marker.marker_id == 2:
             time.sleep(2)
             self.turn_right_90()
-        elif marker.marker_id == 3:
-            self.stop_in_place()
-            return
         else:
             print(f"[MARKER] ID={marker.marker_id}는 미션 대상이 아니므로 무시", flush=True)
             return
