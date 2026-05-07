@@ -44,7 +44,7 @@ CENTER_X_RATIO = 0.35
 
 # AR마커 화면 면적 기준.
 # 마커가 가까울수록 화면에서 크게 보이므로 area 값이 커진다.
-TRIGGER_AREA = 500
+TRIGGER_AREA = 4000
 
 # 같은 마커에 너무 자주 반응하지 않도록 하는 시간
 MARKER_COOLDOWN_SEC = 2.0
@@ -61,6 +61,9 @@ TURN_90_STEPS = 28
 
 # 회전 후 다시 직진을 안정적으로 시작하기 위한 직진 step 수
 FORWARD_AFTER_TURN_STEPS = 2
+
+# SPI 전송 안정화용 인터벌
+STEP_INTERVAL = 0.08
 
 # 기본 직진 명령
 CMD_FORWARD = Cmd(vx=+1, vy=0, wz=0)
@@ -194,11 +197,17 @@ class ContestMission:
             self.forward_step()
 
     def loop(self):
+        last_step_t = 0.0
+
         while True:
             marker, frame = self.detector.detect_front_marker()
 
             if SHOW_CAMERA:
-                afb2.flask.imshow("Contest", cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), 0)
+                afb2.flask.imshow(
+                    "Contest",
+                    cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+                    0,
+                )
 
             now = time.time()
             can_trigger = (now - self.last_trigger_t) > MARKER_COOLDOWN_SEC
@@ -206,8 +215,30 @@ class ContestMission:
             if marker is not None and marker.area > TRIGGER_AREA and can_trigger:
                 self.last_trigger_t = now
                 self.handle_marker(marker)
+
+                # 회전 직후 바로 step 연타 방지
+                last_step_t = time.time()
+
             else:
-                self.forward_step()
+                # 일정 주기로만 보행 step 실행
+                if now - last_step_t >= STEP_INTERVAL:
+                    self.forward_step()
+                    last_step_t = now
+    # def loop(self):
+    #     while True:
+    #         marker, frame = self.detector.detect_front_marker()
+
+    #         if SHOW_CAMERA:
+    #             afb2.flask.imshow("Contest", cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), 0)
+
+    #         now = time.time()
+    #         can_trigger = (now - self.last_trigger_t) > MARKER_COOLDOWN_SEC
+
+    #         if marker is not None and marker.area > TRIGGER_AREA and can_trigger:
+    #             self.last_trigger_t = now
+    #             self.handle_marker(marker)
+    #         else:
+    #             self.forward_step()
 
 
 # ============================================================
