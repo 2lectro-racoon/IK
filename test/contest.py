@@ -66,8 +66,9 @@ FORWARD_AFTER_TURN_STEPS = 2
 # SPI 전송 안정화용 인터벌
 STEP_INTERVAL = 0.12
 
-# 회전 중에도 SPI 전송이 너무 빠르게 몰리지 않도록 별도 인터벌을 둔다.
-TURN_STEP_INTERVAL = 0.12
+# 회전 동작은 너무 길어지면 서보 부하 시간이 늘어나 전원 문제가 커질 수 있다.
+# 따라서 직진보다 짧게 둔다.
+TURN_STEP_INTERVAL = 0.03
 
 # 마커 로그가 카메라 프레임마다 과도하게 출력되지 않도록 제한한다.
 MARKER_PRINT_INTERVAL = 0.25
@@ -159,6 +160,7 @@ class ContestMission:
         self.driver = CrawlDriver()
         self.detector = ArMarkerDetector()
         self.last_trigger_t = 0.0
+        self.last_state = None
 
     def start(self):
         # A_crawl_drive.py와 같은 초기화 흐름을 사용한다.
@@ -170,11 +172,15 @@ class ContestMission:
         self.driver.shutdown()
 
     def forward_step(self):
-        print("go", flush=True)
+        if self.last_state != "go":
+            print("go", flush=True)
+            self.last_state = "go"
         self.driver.crawl_step(CMD_FORWARD)
 
     def turn_left_90(self):
-        print("left", flush=True)
+        if self.last_state != "left":
+            print("left", flush=True)
+            self.last_state = "left"
         self.driver.go_stand(duration=0.25)
 
         for _ in range(TURN_90_STEPS):
@@ -184,7 +190,9 @@ class ContestMission:
         self.driver.go_stand(duration=0.25)
 
     def turn_right_90(self):
-        print("right", flush=True)
+        if self.last_state != "right":
+            print("right", flush=True)
+            self.last_state = "right"
         self.driver.go_stand(duration=0.25)
 
         for _ in range(TURN_90_STEPS):
