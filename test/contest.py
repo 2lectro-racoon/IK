@@ -44,7 +44,7 @@ CENTER_X_RATIO = 0.35
 
 # AR마커 화면 면적 기준.
 # 마커가 가까울수록 화면에서 크게 보이므로 area 값이 커진다.
-TRIGGER_AREA = 4000
+TRIGGER_AREA = 5000
 
 # 같은 마커에 너무 자주 반응하지 않도록 하는 시간
 MARKER_COOLDOWN_SEC = 2.0
@@ -57,13 +57,13 @@ SHOW_CAMERA = True
 # ============================================================
 # 90도 회전에 필요한 crawl_step 반복 횟수.
 # 실제 로봇에서 반드시 튜닝 필요.
-TURN_90_STEPS = 28
+TURN_90_STEPS = 24
 
 # 회전 후 다시 직진을 안정적으로 시작하기 위한 직진 step 수
 FORWARD_AFTER_TURN_STEPS = 2
 
 # SPI 전송 안정화용 인터벌
-STEP_INTERVAL = 0.08
+STEP_INTERVAL = 0.12
 
 # 기본 직진 명령
 CMD_FORWARD = Cmd(vx=+1, vy=0, wz=0)
