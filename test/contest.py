@@ -17,6 +17,7 @@
 #   - 정면 가까운 AR 마커 감지:
 #       ID 1 -> 좌회전 90도 제자리 회전 후 직진
 #       ID 2 -> 우회전 90도 제자리 회전 후 직진
+#       ID 3 -> 제자리 정지
 # ------------------------------------------------------------
 
 from __future__ import annotations
@@ -161,6 +162,7 @@ class ContestMission:
         self.detector = ArMarkerDetector()
         self.last_trigger_t = 0.0
         self.last_state = None
+        self.is_stopped = False
 
     def start(self):
         # A_crawl_drive.py와 같은 초기화 흐름을 사용한다.
@@ -176,6 +178,12 @@ class ContestMission:
             print("go", flush=True)
             self.last_state = "go"
         self.driver.crawl_step(CMD_FORWARD)
+
+    def stop_in_place(self):
+        if self.last_state != "stop":
+            print("stop", flush=True)
+            self.last_state = "stop"
+        self.is_stopped = True
 
     def turn_left_90(self):
         if self.last_state != "left":
@@ -209,6 +217,9 @@ class ContestMission:
         elif marker.marker_id == 2:
             time.sleep(2)
             self.turn_right_90()
+        elif marker.marker_id == 3:
+            self.stop_in_place()
+            return
         else:
             print(f"[MARKER] ID={marker.marker_id}는 미션 대상이 아니므로 무시", flush=True)
             return
@@ -242,6 +253,10 @@ class ContestMission:
                 last_step_t = time.time()
 
             else:
+                # ID 3 마커로 정지한 뒤에는 추가 보행 명령을 보내지 않는다.
+                if self.is_stopped:
+                    continue
+
                 # 일정 주기로만 보행 step 실행
                 if now - last_step_t >= STEP_INTERVAL:
                     self.forward_step()
