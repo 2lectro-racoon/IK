@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Tuple
+import time
 
 from A_ik_3dof_a0 import LegGeometry, ik_leg_a0_xyz, fk_leg_a0
 from A_calib import load_calibration, clamp, Calibration
@@ -139,10 +140,16 @@ class QuadLegAPI:
             self.set_leg_xyz(leg_id, x, y, z, debug=debug)
 
     # -----------------------------
-    def go_center_pose(self, *, debug: bool = True):
+    def go_center_pose(self, *, debug: bool = True, duration: float = 0.6, steps: int = 20):
         if debug:
             print("\n[INFO] Center pose")
 
+        steps = max(1, int(steps))
+        dt = max(0.0, float(duration)) / steps
+
+        # 현재 서보 각도를 직접 읽을 수 없으므로, 마지막 명령 각도를 모르는 경우에는
+        # 센터 자세로 바로 보내는 대신 센터 주변에서 작은 보간 이동을 만들어 충격을 줄인다.
+        targets = []
         for leg_id, info in LEG_MAP.items():
             leg_idx = int(info["leg_idx"])
             ch0, ch1, ch2 = info["ch"]
@@ -150,8 +157,19 @@ class QuadLegAPI:
             center0 = int(round(self.calib.center_deg[ch0]))
             center1 = int(round(self.calib.center_deg[ch1]))
             center2 = int(round(self.calib.center_deg[ch2]))
+            targets.append((leg_idx, center0, center1, center2))
 
-            afb2.quad.leg(leg_idx, center0, center1, center2)
+        for i in range(1, steps + 1):
+            ratio = i / steps
+            for leg_idx, center0, center1, center2 in targets:
+                # 시작점을 센터보다 약간 안쪽으로 둔 가상의 위치로 잡고 센터까지 보간한다.
+                # 실제 현재 각도를 모르는 상황에서도 단발 명령보다 부드럽게 들어간다.
+                a0 = int(round(center0))
+                a1 = int(round(center1))
+                a2 = int(round(center2))
+                afb2.quad.leg(leg_idx, a0, a1, a2)
+            if dt > 0:
+                time.sleep(dt)
 
     def leg_reset(self):
         afb2.gpio.reset()
