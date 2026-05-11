@@ -17,11 +17,13 @@
 #   - 정면 가까운 AR 마커 감지:
 #       ID 1 -> 좌회전 90도 제자리 회전 후 직진
 #       ID 2 -> 우회전 90도 제자리 회전 후 직진
-#       ID 3 -> 제자리 정지
+#       ID 3 -> 정지 후 바디업, 카메라 이미지로 LEFT/RIGHT 판단 후 해당 방향 회전 후 직진
 # ------------------------------------------------------------
 
 from __future__ import annotations
 
+import base64
+import os
 import time
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -29,6 +31,7 @@ from typing import Optional, Tuple
 import afb2
 import cv2
 import numpy as np
+from openai import OpenAI
 
 from A_crawl_drive import CrawlDriver, Cmd, STAND_XYZ
 
@@ -48,13 +51,19 @@ CENTER_X_RATIO = 0.35
 
 TRIGGER_AREA = 8000
 
-# ID 3 정지 마커는 별도 거리 기준을 사용한다.
+# ID 3 방향 판단 마커는 별도 거리 기준을 사용한다.
 ID3_TRIGGER_AREA = 10000
 
 # 같은 마커에 너무 자주 반응하지 않도록 하는 시간
 MARKER_COOLDOWN_SEC = 2.0
 
 SHOW_CAMERA = True
+
+# ID 3 정지 후 카메라 이미지를 OpenAI API로 분석할지 여부
+USE_OPENAI_ANALYSIS = True
+
+# OpenAI API 모델. 필요하면 더 가벼운 모델로 바꿔도 된다.
+OPENAI_MODEL = "gpt-4.1-mini"
 
 
 # ============================================================
@@ -167,6 +176,13 @@ class ContestMission:
         self.last_trigger_t = 0.0
         self.last_state = None
         self.is_stopped = False
+        self.openai_client = None
+
+        if USE_OPENAI_ANALYSIS:
+            if os.getenv("OPENAI_API_KEY"):
+                self.openai_client = OpenAI()
+            else:
+                print("[OPENAI] OPENAI_API_KEY 환경변수가 없어 이미지 분석을 건너뜁니다.", flush=True)
 
     def start(self):
         # A_crawl_drive.py와 같은 초기화 흐름을 사용한다.
@@ -218,13 +234,94 @@ class ContestMission:
             return marker.area > ID3_TRIGGER_AREA
         return marker.area > TRIGGER_AREA
 
+    def analyze_arrow_once(self) -> Optional[str]:
+        """
+        ID 3 정지/자세 상승 후 카메라 이미지를 한 장 캡처해서
+        OpenAI API에 좌/우 방향 판단을 요청한다.
+        반환값은 LEFT, RIGHT, NONE 중 하나로 정규화한다.
+        """
+        if self.openai_client is None:
+            return None
+
+        frame = afb2.camera.get_image()
+
+        ok, buffer = cv2.imencode(".jpg", frame)
+        if not ok:
+            print("[OPENAI] 카메라 프레임 JPEG 인코딩 실패", flush=True)
+            return None
+
+        img_base64 = base64.b64encode(buffer).decode("utf-8")
+
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "이미지 안에 방향을 나타내는 화살표, 표식, 글자가 있는지 확인해줘. "
+                                    "방향은 왼쪽 또는 오른쪽만 존재한다고 가정해. "
+                                    "결과는 반드시 다음 중 하나의 단어만 출력해: LEFT, RIGHT, NONE. "
+                                    "왼쪽 방향이면 LEFT, 오른쪽 방향이면 RIGHT, 방향 판단이 어렵거나 없으면 NONE."
+                                ),
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{img_base64}",
+                                },
+                            },
+                        ],
+                    }
+                ],
+            )
+        except Exception as e:
+            print(f"[OPENAI] 이미지 분석 실패: {e}", flush=True)
+            return None
+
+        result = response.choices[0].message.content.strip().upper()
+
+        if "LEFT" in result:
+            result = "LEFT"
+        elif "RIGHT" in result:
+            result = "RIGHT"
+        else:
+            result = "NONE"
+
+        print(f"[OPENAI] arrow={result}", flush=True)
+        return result
+
     def handle_marker(self, marker: MarkerInfo):
         print(f"marker id={marker.marker_id} area={int(marker.area)}", flush=True)
 
-        # ID 3은 최종 정지 마커이므로 회전 처리보다 먼저 판단한다.
+        # ID 3은 방향 판단 마커이다.
+        # 정지 후 바디업 상태에서 카메라 이미지를 분석하고,
+        # LEFT/RIGHT 결과에 따라 기존 ID 1/2 회전 루틴을 재사용한다.
         if marker.marker_id == 3:
             self.stop_in_place()
             self.driver.bodyup(100, 100, -100, duration=0.8)
+
+            direction = self.analyze_arrow_once()
+
+            # 바디업 상태에서 바로 보행하면 자세 기준이 꼬일 수 있으므로
+            # 기존 보행 기준 자세로 돌아온 뒤 회전한다.
+            self.is_stopped = False
+            self.driver.go_stand(duration=0.4)
+
+            if direction == "LEFT":
+                self.turn_left_90()
+            elif direction == "RIGHT":
+                self.turn_right_90()
+            else:
+                print("[OPENAI] 방향 판단 실패: 회전하지 않고 직진 재개", flush=True)
+
+            for _ in range(FORWARD_AFTER_TURN_STEPS):
+                self.forward_step()
+                time.sleep(STEP_INTERVAL)
+
             return
 
         if marker.marker_id == 1:
@@ -266,7 +363,7 @@ class ContestMission:
                 last_step_t = time.time()
 
             else:
-                # ID 3 마커로 정지한 뒤에는 추가 보행 명령을 보내지 않는다.
+                # 정지 상태에서는 추가 보행 명령을 보내지 않는다.
                 if self.is_stopped:
                     continue
 
