@@ -1136,12 +1136,24 @@ class CrawlDriver:
         """
         self.api.go_center_pose(debug=True)
     
-    def bodyup(self, duration: float = 0.6):
+    def bodyup(
+        self,
+        x: float = 100.0,
+        y: float = 100.0,
+        z: float = -100.0,
+        duration: float = 0.6,
+    ):
         """
         몸을 높이는 자세로 이동.
-        네 다리 모두 같은 로컬 좌표 (100, 100, -100)으로 보낸다.
+
+        기본값:
+          x=100, y=100, z=-100
+
+        예시:
+          drv.bodyup()
+          drv.bodyup(120, 110, -90)
+          drv.bodyup(z=-120)
         """
-        x, y, z = 100.0, 100.0, -100.0
         ok = self.set_all(x, y, z, duration)
 
         if ok:

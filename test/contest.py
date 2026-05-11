@@ -224,7 +224,7 @@ class ContestMission:
         # ID 3은 최종 정지 마커이므로 회전 처리보다 먼저 판단한다.
         if marker.marker_id == 3:
             self.stop_in_place()
-            self.driver.bodyup(duration=0.8)
+            self.driver.bodyup(100, 100, -100, duration=0.8)
             return
 
         if marker.marker_id == 1:
