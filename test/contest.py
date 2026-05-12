@@ -252,6 +252,7 @@ class ContestMission:
         self.last_trigger_t = 0.0
         self.last_state = None
         self.is_stopped = False
+        self.should_exit = False
         self.openai_client = None
 
         if USE_OPENAI_ANALYSIS:
@@ -387,6 +388,13 @@ class ContestMission:
     def handle_marker(self, marker: MarkerInfo):
         print(f"marker id={marker.marker_id} area={int(marker.area)}", flush=True)
 
+        # ID 4는 미션 종료 마커이다.
+        # loop를 빠져나가면 main()의 finally에서 stop()이 호출된다.
+        if marker.marker_id == 4:
+            print("exit", flush=True)
+            self.should_exit = True
+            return
+
         # ID 3은 방향 판단 마커이다.
         # 정지 후 바디업 상태에서 카메라 이미지를 분석하고,
         # LEFT/RIGHT 결과에 따라 기존 ID 1/2 회전 루틴을 재사용한다.
@@ -435,7 +443,7 @@ class ContestMission:
     def loop(self):
         last_step_t = 0.0
 
-        while True:
+        while not self.should_exit:
             marker, _ = self.detector.get_latest()
 
             now = time.time()
@@ -444,6 +452,9 @@ class ContestMission:
             if marker is not None and self.is_marker_triggered(marker) and can_trigger:
                 self.last_trigger_t = now
                 self.handle_marker(marker)
+
+                if self.should_exit:
+                    break
 
                 # 회전 직후 바로 step 연타 방지
                 last_step_t = time.time()
