@@ -121,6 +121,7 @@ class ArMarkerDetector:
         self.latest_frame: Optional[np.ndarray] = None
         self.latest_display_frame: Optional[np.ndarray] = None
         self.latest_marker: Optional[MarkerInfo] = None
+        self.openai_display_frame: Optional[np.ndarray] = None
         self.running = False
         self.thread: Optional[threading.Thread] = None
 
@@ -150,6 +151,11 @@ class ArMarkerDetector:
                 return None
             return self.latest_frame.copy()
 
+    def set_openai_display_frame(self, frame: np.ndarray):
+        """OpenAI 분석에 사용한 정지 이미지를 Flask 1번 슬롯에 유지 표시한다."""
+        with self.lock:
+            self.openai_display_frame = frame.copy()
+
     def _camera_loop(self):
         while self.running:
             try:
@@ -165,6 +171,16 @@ class ArMarkerDetector:
                         cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
                         0,
                     )
+
+                    with self.lock:
+                        openai_frame = None if self.openai_display_frame is None else self.openai_display_frame.copy()
+
+                    if openai_frame is not None:
+                        afb2.flask.imshow(
+                            "openai",
+                            cv2.cvtColor(openai_frame, cv2.COLOR_BGR2RGB),
+                            1,
+                        )
 
             except Exception as e:
                 print(f"[CAMERA] 카메라 스레드 오류: {e}", flush=True)
@@ -313,12 +329,8 @@ class ContestMission:
             return None
 
         if SHOW_CAMERA:
-            # OpenAI로 보낼 정지 이미지를 별도 화면에 1장 표시한다.
-            afb2.flask.imshow(
-                "openai",
-                cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
-                1,
-            )
+            # OpenAI로 보낼 정지 이미지를 카메라 스레드가 1번 슬롯에 계속 표시하게 한다.
+            self.detector.set_openai_display_frame(frame)
             print("DEBUG_OPENAI_IMG", flush=True)
 
         ok, buffer = cv2.imencode(".jpg", frame)
