@@ -72,7 +72,7 @@ OPENAI_MODEL = "gpt-4.1-mini"
 # ============================================================
 # 90도 회전에 필요한 crawl_step 반복 횟수.
 # 실제 로봇에서 반드시 튜닝 필요.
-TURN_90_STEPS = 20
+TURN_90_STEPS = 22
 
 # 회전 후 다시 직진을 안정적으로 시작하기 위한 직진 step 수
 FORWARD_AFTER_TURN_STEPS = 2
