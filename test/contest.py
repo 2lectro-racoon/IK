@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import os
+import threading
 import time
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -116,8 +117,67 @@ class ArMarkerDetector:
         self.detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
         self.last_marker_print_t = 0.0
 
+        self.lock = threading.Lock()
+        self.latest_frame: Optional[np.ndarray] = None
+        self.latest_display_frame: Optional[np.ndarray] = None
+        self.latest_marker: Optional[MarkerInfo] = None
+        self.running = False
+        self.thread: Optional[threading.Thread] = None
+
+    def start(self):
+        if self.running:
+            return
+
+        self.running = True
+        self.thread = threading.Thread(target=self._camera_loop, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        self.running = False
+        if self.thread is not None:
+            self.thread.join(timeout=1.0)
+            self.thread = None
+
+    def get_latest(self) -> Tuple[Optional[MarkerInfo], Optional[np.ndarray]]:
+        with self.lock:
+            marker = self.latest_marker
+            frame = None if self.latest_display_frame is None else self.latest_display_frame.copy()
+        return marker, frame
+
+    def get_raw_frame(self) -> Optional[np.ndarray]:
+        with self.lock:
+            if self.latest_frame is None:
+                return None
+            return self.latest_frame.copy()
+
+    def _camera_loop(self):
+        while self.running:
+            try:
+                marker, frame = self.detect_front_marker()
+
+                with self.lock:
+                    self.latest_marker = marker
+                    self.latest_display_frame = frame.copy()
+
+                if SHOW_CAMERA:
+                    afb2.flask.imshow(
+                        "Contest",
+                        cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+                        0,
+                    )
+
+            except Exception as e:
+                print(f"[CAMERA] 카메라 스레드 오류: {e}", flush=True)
+                time.sleep(0.1)
+
+            time.sleep(0.001)
+
     def detect_front_marker(self) -> Tuple[Optional[MarkerInfo], np.ndarray]:
         frame = afb2.camera.get_image()
+
+        with self.lock:
+            self.latest_frame = frame.copy()
+
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         corners, ids, _ = self.detector.detectMarkers(gray)
@@ -185,12 +245,16 @@ class ContestMission:
                 print("[OPENAI] OPENAI_API_KEY 환경변수가 없어 이미지 분석을 건너뜁니다.", flush=True)
 
     def start(self):
+        # 카메라/Flask 갱신은 별도 스레드에서 계속 돌린다.
+        self.detector.start()
+
         # A_crawl_drive.py와 같은 초기화 흐름을 사용한다.
         self.driver.reset()
 
         print("ready", flush=True)
 
     def stop(self):
+        self.detector.stop()
         self.driver.shutdown()
 
     def forward_step(self):
@@ -243,15 +307,19 @@ class ContestMission:
         if self.openai_client is None:
             return None
 
-        frame = afb2.camera.get_image()
+        frame = self.detector.get_raw_frame()
+        if frame is None:
+            print("[OPENAI] 사용할 수 있는 카메라 프레임이 없습니다.", flush=True)
+            return None
 
         if SHOW_CAMERA:
+            # OpenAI로 보낼 정지 이미지를 별도 화면에 1장 표시한다.
             afb2.flask.imshow(
                 "openai",
                 cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
                 1,
             )
-            print("DEBUG_OPENAI_IMG")
+            print("DEBUG_OPENAI_IMG", flush=True)
 
         ok, buffer = cv2.imencode(".jpg", frame)
         if not ok:
@@ -317,8 +385,8 @@ class ContestMission:
             # 바디업 상태에서 바로 보행하면 자세 기준이 꼬일 수 있으므로
             # 기존 보행 기준 자세로 돌아온 뒤 회전한다.
             self.is_stopped = False
-            self.driver.go_stand(duration=0.4)
-            time.sleep(3)
+            # self.driver.go_stand(duration=0.4)
+            # time.sleep(3)
             self.driver.bodyup(60, 120, -50, duration=0.8)
             time.sleep(3)
 
@@ -354,14 +422,7 @@ class ContestMission:
         last_step_t = 0.0
 
         while True:
-            marker, frame = self.detector.detect_front_marker()
-
-            if SHOW_CAMERA:
-                afb2.flask.imshow(
-                    "Contest",
-                    cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
-                    0,
-                )
+            marker, _ = self.detector.get_latest()
 
             now = time.time()
             can_trigger = (now - self.last_trigger_t) > MARKER_COOLDOWN_SEC
