@@ -1134,7 +1134,7 @@ class CrawlDriver:
         하드웨어 초기화 시간 확보 목적.
         """
         self.api.leg_reset()
-        time.sleep(55)
+        time.sleep(5)
 
     def shutdown(self):
         """
