@@ -426,10 +426,10 @@ class ContestMission:
             return
 
         if marker.marker_id == 1:
-            time.sleep(2)
+            time.sleep(0.5)
             self.turn_left_90()
         elif marker.marker_id == 2:
-            time.sleep(2)
+            time.sleep(0.5)
             self.turn_right_90()
         else:
             print(f"[MARKER] ID={marker.marker_id}는 미션 대상이 아니므로 무시", flush=True)

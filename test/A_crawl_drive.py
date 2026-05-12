@@ -58,6 +58,8 @@ LIFT_DZ = 60.0
 
 # 몸을 한쪽으로 얼마나 기울일지(무게중심 이동)
 # 한 다리를 들기 전에 반대 방향 지지력을 높이기 위해 사용
+# 빠른 보행 테스트가 필요하면 False로 바꿔서 SHIFT 단계를 건너뛸 수 있다.
+SHIFT_ENABLE = True
 SHIFT_MAG = 20.0
 
 # ------------------------------------------------------------
@@ -679,7 +681,8 @@ class CrawlDriver:
         # 1) SHIFT : 들 다리 반대쪽으로 몸의 중심 이동
         # ----------------------------------------------------
         desired_body_shift = +SHIFT_MAG if swing_leg in RIGHT_LEGS else -SHIFT_MAG
-        self.shift_body(swing_leg, desired_body_shift, PHASE_T)
+        if SHIFT_ENABLE:
+            self.shift_body(swing_leg, desired_body_shift, PHASE_T)
 
         # ----------------------------------------------------
         # 1b) COUNTER : 대각선/보조 다리를 임시로 더 뻗어서 안정성 확보
@@ -779,7 +782,7 @@ class CrawlDriver:
             dy_local_shift = body_y_to_local_y(leg_id, desired_body_shift)
             x_cur, y_cur, _ = self.foot[leg_id]
 
-            y_t = y_cur - dy_local_shift
+            y_t = y_cur - dy_local_shift if SHIFT_ENABLE else y_cur
             x_t = x_cur
 
             if leg_id == diag_leg:
@@ -985,7 +988,8 @@ class CrawlDriver:
 
         # 1) SHIFT
         desired_body_shift = +SHIFT_MAG if swing_leg in RIGHT_LEGS else -SHIFT_MAG
-        self.shift_body(swing_leg, desired_body_shift, PHASE_T)
+        if SHIFT_ENABLE:
+            self.shift_body(swing_leg, desired_body_shift, PHASE_T)
 
         # 1b) COUNTER
         xd, yd, zd = self.foot[diag_leg]
@@ -1090,7 +1094,7 @@ class CrawlDriver:
             dy_local_shift = body_y_to_local_y(leg_id, desired_body_shift)
             x_cur, y_cur, _ = self.foot[leg_id]
 
-            y_t = y_cur - dy_local_shift
+            y_t = y_cur - dy_local_shift if SHIFT_ENABLE else y_cur
             x_t = x_cur
 
             if leg_id == diag_leg:
