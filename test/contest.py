@@ -251,6 +251,7 @@ class ContestMission:
                 cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
                 1,
             )
+            print("DEBUG_OPENAI_IMG")
 
         ok, buffer = cv2.imencode(".jpg", frame)
         if not ok:
@@ -317,6 +318,8 @@ class ContestMission:
             # 기존 보행 기준 자세로 돌아온 뒤 회전한다.
             self.is_stopped = False
             self.driver.go_stand(duration=0.4)
+            time.sleep(3)
+            self.driver.bodyup(60, 120, -50, duration=0.8)
             time.sleep(3)
 
             if direction == "LEFT":
