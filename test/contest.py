@@ -271,6 +271,8 @@ class ContestMission:
 
     def stop(self):
         self.detector.stop()
+        self.driver.bodyup(60, 120, -20, duration=0.8)
+        time.sleep(2)
         self.driver.shutdown()
 
     def forward_step(self):
