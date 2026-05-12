@@ -245,6 +245,13 @@ class ContestMission:
 
         frame = afb2.camera.get_image()
 
+        if SHOW_CAMERA:
+            afb2.flask.imshow(
+                "openai",
+                cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
+                1,
+            )
+
         ok, buffer = cv2.imencode(".jpg", frame)
         if not ok:
             print("[OPENAI] 카메라 프레임 JPEG 인코딩 실패", flush=True)
@@ -310,6 +317,7 @@ class ContestMission:
             # 기존 보행 기준 자세로 돌아온 뒤 회전한다.
             self.is_stopped = False
             self.driver.go_stand(duration=0.4)
+            time.sleep(3)
 
             if direction == "LEFT":
                 self.turn_left_90()
