@@ -73,6 +73,7 @@ OPENAI_MODEL = "gpt-4.1-mini"
 # 90도 회전에 필요한 crawl_step 반복 횟수.
 # 실제 로봇에서 반드시 튜닝 필요.
 TURN_90_STEPS = 22
+TURN_45_STEPS = int(TURN_90_STEPS/2)
 
 # 회전 후 다시 직진을 안정적으로 시작하기 위한 직진 step 수
 FORWARD_AFTER_TURN_STEPS = 2
@@ -254,6 +255,7 @@ class ContestMission:
         self.is_stopped = False
         self.should_exit = False
         self.openai_client = None
+        self.start_time = None
 
         if USE_OPENAI_ANALYSIS:
             if os.getenv("OPENAI_API_KEY"):
@@ -268,10 +270,17 @@ class ContestMission:
         # A_crawl_drive.py와 같은 초기화 흐름을 사용한다.
         self.driver.reset()
 
+        self.start_time = time.time()
+
         print("ready", flush=True)
 
     def stop(self):
         self.detector.stop()
+
+        if self.start_time is not None:
+            elapsed = time.time() - self.start_time
+            print(f"[TIME] elapsed={elapsed:.1f} sec", flush=True)
+
         self.driver.bodyup(60, 120, -10, duration=0.8)
         time.sleep(1)
         self.driver.shutdown()
@@ -307,6 +316,30 @@ class ContestMission:
         self.driver.go_stand(duration=0.25)
 
         for _ in range(TURN_90_STEPS):
+            self.driver.crawl_step(CMD_TURN_RIGHT)
+            time.sleep(TURN_STEP_INTERVAL)
+
+        self.driver.go_stand(duration=0.25)
+    
+    def turn_left_45(self):
+        if self.last_state != "left":
+            print("left", flush=True)
+            self.last_state = "left"
+        self.driver.go_stand(duration=0.25)
+
+        for _ in range(TURN_45_STEPS):
+            self.driver.crawl_step(CMD_TURN_LEFT)
+            time.sleep(TURN_STEP_INTERVAL)
+
+        self.driver.go_stand(duration=0.25)
+
+    def turn_right_45(self):
+        if self.last_state != "right":
+            print("right", flush=True)
+            self.last_state = "right"
+        self.driver.go_stand(duration=0.25)
+
+        for _ in range(TURN_45_STEPS):
             self.driver.crawl_step(CMD_TURN_RIGHT)
             time.sleep(TURN_STEP_INTERVAL)
 
@@ -427,10 +460,10 @@ class ContestMission:
 
         if marker.marker_id == 1:
             time.sleep(0.5)
-            self.turn_left_90()
+            self.turn_left_45()
         elif marker.marker_id == 2:
             time.sleep(0.5)
-            self.turn_right_90()
+            self.turn_right_45()
         else:
             print(f"[MARKER] ID={marker.marker_id}는 미션 대상이 아니므로 무시", flush=True)
             return

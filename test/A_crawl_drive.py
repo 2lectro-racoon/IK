@@ -1130,11 +1130,11 @@ class CrawlDriver:
     def reset(self):
         """
         GPIO/보드 리셋.
-        현재는 리셋 후 15초 대기.
+        현재는 리셋 후 5초 대기.
         하드웨어 초기화 시간 확보 목적.
         """
         self.api.leg_reset()
-        time.sleep(15)
+        time.sleep(55)
 
     def shutdown(self):
         """
